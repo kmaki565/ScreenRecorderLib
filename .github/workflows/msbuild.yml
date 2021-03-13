@@ -5,23 +5,27 @@ on: [push, pull_request]
 env:
   SOLUTION_NAME: ScreenRecorderLib
   PROJECT_NAME: TestApp
+  TEST_PROJECT_NAME: Tests
 
 jobs:
   build:
-    name: Build for solution platform ${{ matrix.platform }}
+    name: Build ${{ matrix.platform }}
     runs-on: windows-latest
     strategy:
       matrix:
         platform: [x64, x86]
 
     steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    - uses: actions/checkout@v2
-    - uses: microsoft/setup-msbuild@v1
-    - run: nuget restore ${{ env.SOLUTION_NAME }}.sln
-    - run: msbuild /m '/p:Configuration=Release;Platform="${{ matrix.platform }}"' ${{ env.SOLUTION_NAME }}.sln
-    # Save artifacts
-    - uses: actions/upload-artifact@v2
+    - name: Checkout code
+      uses: actions/checkout@v2
+    - name: Build code
+      uses: microsoft/setup-msbuild@v1
+      run: nuget restore ${{ env.SOLUTION_NAME }}.sln
+      run: msbuild /m '/p:Configuration=Release;Platform="${{ matrix.platform }}"' ${{ env.SOLUTION_NAME }}.sln
+    - name: Unit test
+      run: vstest.console ${{ env.TEST_PROJECT_NAME }}\bin\${{ matrix.platform }}\Release\${{ env.TEST_PROJECT_NAME }}.dll
+    - name: Save artifacts
+      uses: actions/upload-artifact@v2
       with:
         name: ${{ env.SOLUTION_NAME }}-${{ github.sha }}
         path: ${{ env.PROJECT_NAME }}\bin\${{ matrix.platform }}\Release
