@@ -5,7 +5,6 @@ on: [push, pull_request]
 env:
   SOLUTION_NAME: ScreenRecorderLib
   PROJECT_NAME: TestApp
-  TEST_PROJECT_NAME: Tests
 
 jobs:
   build:
@@ -25,6 +24,3 @@ jobs:
       with:
         name: ${{ env.SOLUTION_NAME }}-${{ github.sha }}
         path: ${{ env.PROJECT_NAME }}\bin\${{ matrix.platform }}\Release
-    - uses: Malcolmnixon/Setup-VSTest@v4
-    - name: Unit test
-      run: vstest.console ${{ env.TEST_PROJECT_NAME }}\bin\${{ matrix.platform }}\Release\${{ env.TEST_PROJECT_NAME }}.dll
