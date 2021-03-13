@@ -20,10 +20,11 @@ jobs:
     - uses: microsoft/setup-msbuild@v1
     - run: nuget restore ${{ env.SOLUTION_NAME }}.sln
     - run: msbuild /m '/p:Configuration=Release;Platform="${{ matrix.platform }}"' ${{ env.SOLUTION_NAME }}.sln
-    - name: Unit test
-      run: vstest.console ${{ env.TEST_PROJECT_NAME }}\bin\${{ matrix.platform }}\Release\${{ env.TEST_PROJECT_NAME }}.dll
     - name: Save artifacts
       uses: actions/upload-artifact@v2
       with:
         name: ${{ env.SOLUTION_NAME }}-${{ github.sha }}
         path: ${{ env.PROJECT_NAME }}\bin\${{ matrix.platform }}\Release
+    - uses: Malcolmnixon/Setup-VSTest@v4
+    - name: Unit test
+      run: vstest.console ${{ env.TEST_PROJECT_NAME }}\bin\${{ matrix.platform }}\Release\${{ env.TEST_PROJECT_NAME }}.dll
