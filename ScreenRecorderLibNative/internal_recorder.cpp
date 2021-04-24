@@ -928,14 +928,9 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 						CComPtr<ID3D11Texture2D> pAcquiredDesktopImage = nullptr;
 						RETURN_ON_BAD_HR(hr = pDesktopResource->QueryInterface(IID_PPV_ARGS(&pAcquiredDesktopImage)));
 
-						CComPtr<ID3D11Texture2D> pResizedImage = nullptr;
-						D3D11_TEXTURE2D_DESC targetDesc;
-						SIZE newSize = { 1920, 1080 };
-						pResizer->InitializeDesc(newSize, &targetDesc);
-						// Create target texture
-						hr = m_Device->CreateTexture2D(&targetDesc, nullptr, &pResizedImage);
+						CComPtr<ID3D11Texture2D> pResizedImage;
+						hr = pResizer->Resize(pAcquiredDesktopImage, &pResizedImage, 1920, 1080);
 						RETURN_ON_BAD_HR(hr);
-						pResizer->Resize(pAcquiredDesktopImage, pResizedImage, newSize);
 
 						m_ImmediateContext->CopyResource(pPreviousFrameCopy, pResizedImage);
 						pAcquiredDesktopImage.Release();
@@ -976,14 +971,9 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				RETURN_ON_BAD_HR(hr = pDesktopResource->QueryInterface(IID_PPV_ARGS(&pAcquiredDesktopImage)));
 			}
 			if (pAcquiredDesktopImage != nullptr) {
-				CComPtr<ID3D11Texture2D> pResizedImage = nullptr;
-				D3D11_TEXTURE2D_DESC targetDesc;
-				SIZE newSize = { 1920, 1080 };
-				pResizer->InitializeDesc(newSize, &targetDesc);
-				// Create target texture
-				hr = m_Device->CreateTexture2D(&targetDesc, nullptr, &pResizedImage);
+				CComPtr<ID3D11Texture2D> pResizedImage;
+				hr = pResizer->Resize(pAcquiredDesktopImage, &pResizedImage, 1920, 1080);
 				RETURN_ON_BAD_HR(hr);
-				pResizer->Resize(pAcquiredDesktopImage, pResizedImage, newSize);
 
 				m_ImmediateContext->CopyResource(pFrameCopy, pResizedImage);
 				if (pPreviousFrameCopy) {

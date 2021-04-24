@@ -2,9 +2,6 @@
 #include <windows.h>
 #include <d3d11.h>
 #include <dxgi1_2.h>
-//#include <sal.h>
-//#include <new>
-//#include <warning.h>
 #include <DirectXMath.h>
 
 #include "PixelShader.h"
@@ -25,12 +22,12 @@ public:
 	Resizer();
 	~Resizer();
     HRESULT Initialize(ID3D11DeviceContext* ImmediateContext, ID3D11Device* Device);
-    HRESULT InitializeDesc(_In_ SIZE size, _Out_ D3D11_TEXTURE2D_DESC* pTargetDesc);
-    HRESULT Resize(ID3D11Texture2D* srcTexture, ID3D11Texture2D* resizedTexture, SIZE targetSize);
+    HRESULT Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedTexture, UINT targetWidth, UINT targetHeight);
 
 private:
-    void SetViewPort(SIZE size);
+    void SetViewPort(UINT width, UINT height);
     HRESULT InitShaders();
+    HRESULT InitializeDesc(_In_ UINT width, _In_ UINT height, _Out_ D3D11_TEXTURE2D_DESC* pTargetDesc);
     void CleanRefs();
 
     ID3D11Device* m_Device;

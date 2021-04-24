@@ -2,6 +2,7 @@
 #include "screengrab.h"
 #include "utilities.h"
 #include <wincodec.h>
+#include <atlbase.h>
 
 using namespace DirectX;
 
@@ -63,20 +64,20 @@ HRESULT Resizer::Initialize(ID3D11DeviceContext* ImmediateContext, ID3D11Device*
     return S_OK;
 }
 
-HRESULT Resizer::Resize(ID3D11Texture2D* srcTexture, ID3D11Texture2D* resizedTexture, SIZE targetSize)
+HRESULT Resizer::Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedTexture, UINT targetWidth, UINT targetHeight)
 {
     HRESULT hr;
 
     // Create shader resource from texture of the original frame
     D3D11_TEXTURE2D_DESC desktopDesc = {};
-    srcTexture->GetDesc(&desktopDesc);
+    orgTexture->GetDesc(&desktopDesc);
     D3D11_SHADER_RESOURCE_VIEW_DESC SDesc = {};
     SDesc.Format = desktopDesc.Format;
     SDesc.ViewDimension = D3D11_SRV_DIMENSION_TEXTURE2D;
     SDesc.Texture2D.MostDetailedMip = desktopDesc.MipLevels - 1;
     SDesc.Texture2D.MipLevels = desktopDesc.MipLevels;
     ID3D11ShaderResourceView* srcSRV;
-    hr = m_Device->CreateShaderResourceView(srcTexture, &SDesc, &srcSRV);
+    hr = m_Device->CreateShaderResourceView(orgTexture, &SDesc, &srcSRV);
     if (FAILED(hr))
     {
         _com_error err(hr);
@@ -84,15 +85,21 @@ HRESULT Resizer::Resize(ID3D11Texture2D* srcTexture, ID3D11Texture2D* resizedTex
         return hr;
     }
 
+    // Create target texture
+    D3D11_TEXTURE2D_DESC targetDesc;
+    InitializeDesc(targetWidth, targetHeight, &targetDesc);
+    hr = m_Device->CreateTexture2D(&targetDesc, nullptr, pResizedTexture);
+    RETURN_ON_BAD_HR(hr);
+
     // Make new render target view
     ID3D11RenderTargetView* RTV;
-    hr = m_Device->CreateRenderTargetView(resizedTexture, nullptr, &RTV);
+    hr = m_Device->CreateRenderTargetView(*pResizedTexture, nullptr, &RTV);
     RETURN_ON_BAD_HR(hr);
 
     m_DeviceContext->OMSetRenderTargets(1, &RTV, nullptr);
 
     // Set view port
-    SetViewPort(targetSize);
+    SetViewPort(targetWidth, targetHeight);
 
     // Vertices for drawing whole texture
     VERTEX Vertices[] =
@@ -153,12 +160,12 @@ HRESULT Resizer::Resize(ID3D11Texture2D* srcTexture, ID3D11Texture2D* resizedTex
     return S_OK;
 }
 
-HRESULT Resizer::InitializeDesc(_In_ SIZE size, _Out_ D3D11_TEXTURE2D_DESC* pTargetDesc)
+HRESULT Resizer::InitializeDesc(_In_ UINT width, _In_ UINT height, _Out_ D3D11_TEXTURE2D_DESC* pTargetDesc)
 {
     // Create shared texture for the target view
     RtlZeroMemory(pTargetDesc, sizeof(D3D11_TEXTURE2D_DESC));
-    pTargetDesc->Width = size.cx;
-    pTargetDesc->Height = size.cy;
+    pTargetDesc->Width = width;
+    pTargetDesc->Height = height;
     pTargetDesc->MipLevels = 1;
     pTargetDesc->ArraySize = 1;
     pTargetDesc->Format = DXGI_FORMAT_B8G8R8A8_UNORM;
@@ -171,11 +178,11 @@ HRESULT Resizer::InitializeDesc(_In_ SIZE size, _Out_ D3D11_TEXTURE2D_DESC* pTar
     return S_OK;
 }
 
-void Resizer::SetViewPort(SIZE size)
+void Resizer::SetViewPort(UINT width, UINT height)
 {
     D3D11_VIEWPORT VP;
-    VP.Width = static_cast<FLOAT>(size.cx);
-    VP.Height = static_cast<FLOAT>(size.cy);
+    VP.Width = static_cast<FLOAT>(width);
+    VP.Height = static_cast<FLOAT>(height);
     VP.MinDepth = 0.0f;
     VP.MaxDepth = 1.0f;
     VP.TopLeftX = 0;
