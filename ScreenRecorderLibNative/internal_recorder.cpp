@@ -22,6 +22,7 @@
 #include "graphics_capture.h"
 #include "graphics_capture.util.h"
 #include "monitor_list.h"
+#include "Resizer.h"
 
 #pragma comment(lib, "dxguid.lib")
 #pragma comment(lib, "D3D11.lib")
@@ -735,6 +736,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RETURN_ON_BAD_HR(hr = InitializeDesktopDupl(m_Device, pSelectedOutput, &pDeskDupl, &outputDuplDesc));
 	DXGI_MODE_ROTATION screenRotation = outputDuplDesc.Rotation;
 	D3D11_TEXTURE2D_DESC sourceFrameDesc;
+	D3D11_TEXTURE2D_DESC resizedFrameDesc;
 	D3D11_TEXTURE2D_DESC destFrameDesc;
 	RECT videoInputFrameRect, videoOutputFrameRect;
 
@@ -743,7 +745,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RtlZeroMemory(&videoInputFrameRect, sizeof(videoInputFrameRect));
 	RtlZeroMemory(&videoOutputFrameRect, sizeof(videoOutputFrameRect));
 
-	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
+	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &resizedFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
 	bool isDestRectEqualToSourceRect = EqualRect(&videoInputFrameRect, &videoOutputFrameRect);
 
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
@@ -752,6 +754,9 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 
 	mouse_pointer::PTR_INFO PtrInfo;
 	RtlZeroMemory(&PtrInfo, sizeof(PtrInfo));
+
+	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
+	RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
 
 	if (m_RecorderMode == MODE_VIDEO) {
 		loopback_capture *outputCapture = nullptr;
@@ -918,12 +923,23 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 					if (FrameInfo.AccumulatedFrames > 0) {
 						//we got a frame, but it's too soon, so we cache it and see if there are more changes.
 						if (pPreviousFrameCopy == nullptr) {
-							RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc, nullptr, &pPreviousFrameCopy));
+							RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&resizedFrameDesc, nullptr, &pPreviousFrameCopy));
 						}
 						CComPtr<ID3D11Texture2D> pAcquiredDesktopImage = nullptr;
 						RETURN_ON_BAD_HR(hr = pDesktopResource->QueryInterface(IID_PPV_ARGS(&pAcquiredDesktopImage)));
-						m_ImmediateContext->CopyResource(pPreviousFrameCopy, pAcquiredDesktopImage);
+
+						CComPtr<ID3D11Texture2D> pResizedImage = nullptr;
+						D3D11_TEXTURE2D_DESC targetDesc;
+						SIZE newSize = { 1920, 1080 };
+						pResizer->InitializeDesc(newSize, &targetDesc);
+						// Create target texture
+						hr = m_Device->CreateTexture2D(&targetDesc, nullptr, &pResizedImage);
+						RETURN_ON_BAD_HR(hr);
+						pResizer->Resize(pAcquiredDesktopImage, pResizedImage, newSize);
+
+						m_ImmediateContext->CopyResource(pPreviousFrameCopy, pResizedImage);
 						pAcquiredDesktopImage.Release();
+						pResizedImage.Release();
 					}
 				}
 				delay = true;
@@ -954,19 +970,29 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 		lastFrame = steady_clock::now();
 		{
 			CComPtr<ID3D11Texture2D> pFrameCopy = nullptr;
-			RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc, nullptr, &pFrameCopy));
+			RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&resizedFrameDesc, nullptr, &pFrameCopy));
 			CComPtr<ID3D11Texture2D> pAcquiredDesktopImage = nullptr;
 			if (pDesktopResource != nullptr && FrameInfo.AccumulatedFrames > 0) {
 				RETURN_ON_BAD_HR(hr = pDesktopResource->QueryInterface(IID_PPV_ARGS(&pAcquiredDesktopImage)));
 			}
 			if (pAcquiredDesktopImage != nullptr) {
-				m_ImmediateContext->CopyResource(pFrameCopy, pAcquiredDesktopImage);
+				CComPtr<ID3D11Texture2D> pResizedImage = nullptr;
+				D3D11_TEXTURE2D_DESC targetDesc;
+				SIZE newSize = { 1920, 1080 };
+				pResizer->InitializeDesc(newSize, &targetDesc);
+				// Create target texture
+				hr = m_Device->CreateTexture2D(&targetDesc, nullptr, &pResizedImage);
+				RETURN_ON_BAD_HR(hr);
+				pResizer->Resize(pAcquiredDesktopImage, pResizedImage, newSize);
+
+				m_ImmediateContext->CopyResource(pFrameCopy, pResizedImage);
 				if (pPreviousFrameCopy) {
 					pPreviousFrameCopy.Release();
 				}
+				pResizedImage.Release();
 				//Copy new frame to pPreviousFrameCopy
 				if (m_RecorderMode == MODE_VIDEO || m_RecorderMode == MODE_SLIDESHOW) {
-					RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc, nullptr, &pPreviousFrameCopy));
+					RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&resizedFrameDesc, nullptr, &pPreviousFrameCopy));
 					m_ImmediateContext->CopyResource(pPreviousFrameCopy, pFrameCopy);
 					SetDebugName(pPreviousFrameCopy, "PreviousFrameCopy");
 				}
@@ -999,7 +1025,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			}
 
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-				TakeSnapshotsWithVideo(pFrameCopy, sourceFrameDesc, videoOutputFrameRect);
+				TakeSnapshotsWithVideo(pFrameCopy, resizedFrameDesc, videoOutputFrameRect);
 			}
 
 			FrameWriteModel model;
@@ -1086,7 +1112,7 @@ std::vector<BYTE> internal_recorder::GrabAudioFrame(std::unique_ptr<loopback_cap
 		return std::vector<BYTE>();
 }
 
-HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out_ D3D11_TEXTURE2D_DESC * pSourceFrameDesc, _Out_ D3D11_TEXTURE2D_DESC * pDestFrameDesc, _Out_ RECT * pSourceRect, _Out_ RECT * pDestRect) {
+HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out_ D3D11_TEXTURE2D_DESC * pSourceFrameDesc, _Out_ D3D11_TEXTURE2D_DESC* pResizedFrameDesc, _Out_ D3D11_TEXTURE2D_DESC * pDestFrameDesc, _Out_ RECT * pSourceRect, _Out_ RECT * pDestRect) {
 	UINT monitorWidth = (outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE90 || outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE270)
 		? outputDuplDesc.ModeDesc.Height : outputDuplDesc.ModeDesc.Width;
 
@@ -1122,6 +1148,19 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	sourceFrameDesc.CPUAccessFlags = 0;
 	sourceFrameDesc.Usage = D3D11_USAGE_DEFAULT;
 
+	D3D11_TEXTURE2D_DESC resizedDesc;
+	resizedDesc.Width = 1920;
+	resizedDesc.Height = 1080;
+	resizedDesc.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
+	resizedDesc.ArraySize = 1;
+	resizedDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
+	resizedDesc.MiscFlags = 0;
+	resizedDesc.SampleDesc.Count = 1;
+	resizedDesc.SampleDesc.Quality = 0;
+	resizedDesc.MipLevels = 1;
+	resizedDesc.CPUAccessFlags = 0;
+	resizedDesc.Usage = D3D11_USAGE_DEFAULT;
+
 	D3D11_TEXTURE2D_DESC destFrameDesc;
 	destFrameDesc.Width = destRect.right - destRect.left;
 	destFrameDesc.Height = destRect.bottom - destRect.top;
@@ -1138,6 +1177,7 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	*pSourceRect = sourceRect;
 	*pDestRect = destRect;
 	*pSourceFrameDesc = sourceFrameDesc;
+	*pResizedFrameDesc = resizedDesc;
 	*pDestFrameDesc = destFrameDesc;
 	return S_OK;
 }
@@ -1392,11 +1432,11 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 		RETURN_ON_BAD_HR(MFCreateFile(MF_ACCESSMODE_READWRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, pathString, &pOutStream));
 	};
 
-	UINT sourceWidth = max(0, sourceRect.right - sourceRect.left);
-	UINT sourceHeight = max(0, sourceRect.bottom - sourceRect.top);
+	UINT sourceWidth = 1920;// max(0, sourceRect.right - sourceRect.left);
+	UINT sourceHeight = 1080; //max(0, sourceRect.bottom - sourceRect.top);
 
-	UINT destWidth = max(0, destRect.right - destRect.left);
-	UINT destHeight = max(0, destRect.bottom - destRect.top);
+	UINT destWidth = 1920;// max(0, destRect.right - destRect.left);
+	UINT destHeight = 1080;// max(0, destRect.bottom - destRect.top);
 
 	RETURN_ON_BAD_HR(ConfigureOutputMediaTypes(destWidth, destHeight, &pVideoMediaTypeOut, &pAudioMediaTypeOut));
 	RETURN_ON_BAD_HR(ConfigureInputMediaTypes(sourceWidth, sourceHeight, rotationFormat, pVideoMediaTypeOut, &pVideoMediaTypeIn, &pAudioMediaTypeIn));
