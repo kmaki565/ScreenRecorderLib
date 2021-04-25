@@ -982,14 +982,6 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 
 			SetDebugName(pFrameCopy, "FrameCopy");
 
-			if (gotMousePointer) {
-				hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
-				if (FAILED(hr)) {
-					_com_error err(hr);
-					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
-					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
-				}
-			}
 			if (token.is_canceled()) {
 				DEBUG("Recording task was cancelled");
 				hr = S_OK;
@@ -1008,6 +1000,14 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
 
+			if (gotMousePointer) {
+				hr = DrawMousePointer(pResizedFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
+				if (FAILED(hr)) {
+					_com_error err(hr);
+					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
+					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
+				}
+			}
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
 				TakeSnapshotsWithVideo(pResizedFrameCopy, resizedFrameDesc, videoOutputFrameRect);
 			}
@@ -1036,9 +1036,6 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	//Push the last frame waiting to be recorded to the sink writer.
 	if (pPreviousFrameCopy != nullptr) {
 		INT64 duration = duration_cast<nanoseconds>(chrono::steady_clock::now() - lastFrame).count() / 100;
-		if (gotMousePointer) {
-			DrawMousePointer(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
-		}
 		if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT) && !isDestRectEqualToSourceRect) {
 			ID3D11Texture2D *pCroppedFrameCopy;
 			RETURN_ON_BAD_HR(hr = CropFrame(pPreviousFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
@@ -1049,6 +1046,10 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 		hr = pResizer->Resize(pPreviousFrameCopy, &pResizedPreviousFrameCopy, 1920, 1080);
 		RETURN_ON_BAD_HR(hr);
 		pPreviousFrameCopy.Release();
+
+		if (gotMousePointer) {
+			DrawMousePointer(pResizedPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
+		}
 
 		FrameWriteModel model;
 		RtlZeroMemory(&model, sizeof(model));
