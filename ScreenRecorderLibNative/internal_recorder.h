@@ -140,6 +140,8 @@ public:
 	void SetOutputVolume(float volume) { m_OutputVolumeModifier = volume; }
 	void SetTakeSnapthotsWithVideo(bool isEnabled) { m_TakesSnapshotsWithVideo = isEnabled; }
 	void SetSnapthotsWithVideoInterval(UINT32 value) { m_SnapshotsWithVideoInterval = std::chrono::seconds(value); }
+	void SetVideoFrameWidth(UINT32 value) { m_ScaledFrameWidth = value; }
+	void SetVideoFrameHeight(UINT32 value) { m_ScaledFrameHeight = value; }
 	static bool SetExcludeFromCapture(HWND hwnd, bool isExcluded);
 
 	[[deprecated]]
@@ -213,6 +215,10 @@ private:
 	UINT32 m_AudioChannels = 2; //Number of audio channels. 1,2 and 6 is supported. 6 only on windows 8 and up.
 	UINT32 m_VideoBitrateControlMode = eAVEncCommonRateControlMode_Quality;
 	std::chrono::seconds m_SnapshotsWithVideoInterval = std::chrono::seconds(10);
+	UINT32 m_ScaledFrameWidth = 0;
+	UINT32 m_ScaledFrameHeight = 0;
+	UINT32 m_OriginalFrameWidth = 0;
+	UINT32 m_OriginalFrameHeight = 0;
 	bool m_IsMousePointerEnabled = true;
 	bool m_IsAudioEnabled = false;
 	bool m_IsOutputDeviceEnabled = true;
@@ -271,7 +277,7 @@ private:
 	HRESULT WriteFrameToVideo(INT64 frameStartPos, INT64 frameDuration, DWORD streamIndex, _In_ ID3D11Texture2D* pAcquiredDesktopImage);
 	HRESULT WriteFrameToImage(_In_ ID3D11Texture2D* pAcquiredDesktopImage, std::wstring filePath);
 	void WriteFrameToImageAsync(_In_ ID3D11Texture2D* pAcquiredDesktopImage, std::wstring filePath);
-	HRESULT TakeSnapshotsWithVideo(ID3D11Texture2D* frame, D3D11_TEXTURE2D_DESC frameDesc, RECT destRect);
+	HRESULT TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT destRect);
 	HRESULT WriteAudioSamplesToVideo(INT64 frameStartPos, INT64 frameDuration, DWORD streamIndex, _In_ BYTE *pSrc, DWORD cbData);
 	HRESULT GetOutputForDeviceName(std::wstring deviceName, _Outptr_opt_result_maybenull_ IDXGIOutput **adapter);
 	HRESULT SetAttributeU32(_Inout_ ATL::CComPtr<ICodecAPI>& codec, const GUID& guid, UINT32 value);

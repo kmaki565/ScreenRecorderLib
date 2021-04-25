@@ -168,7 +168,7 @@ HRESULT mouse_pointer::DrawMouseClick(_In_ PTR_INFO* PtrInfo, _In_ ID3D11Texture
 //
 // Draw mouse provided in buffer to backbuffer
 //
-HRESULT mouse_pointer::DrawMousePointer(_In_ PTR_INFO* PtrInfo, _In_ ID3D11DeviceContext* DeviceContext, _In_ ID3D11Device* Device, _Inout_ ID3D11Texture2D* bgTexture, DXGI_MODE_ROTATION rotation)
+HRESULT mouse_pointer::DrawMousePointer(_In_ PTR_INFO* PtrInfo, _In_ ID3D11DeviceContext* DeviceContext, _In_ ID3D11Device* Device, _Inout_ ID3D11Texture2D* bgTexture, DXGI_MODE_ROTATION rotation, UINT32 desktopWidth, UINT32 desktopHeight)
 {
 	if (!PtrInfo || !PtrInfo->Visible || PtrInfo->PtrShapeBuffer == nullptr)
 		return S_FALSE;
@@ -192,8 +192,8 @@ HRESULT mouse_pointer::DrawMousePointer(_In_ PTR_INFO* PtrInfo, _In_ ID3D11Devic
 		{ XMFLOAT3(1.0f, 1.0f, 0), XMFLOAT2(1.0f, 0.0f) },
 	};
 
-	INT DesktopWidth = 3840;
-	INT DesktopHeight = 2160;
+	INT DesktopWidth = desktopWidth == 0 ? DesktopDesc.Width : desktopWidth;
+	INT DesktopHeight = desktopHeight == 0 ? DesktopDesc.Height : desktopHeight;
 
 	// Center of desktop dimensions
 	INT CenterX = (DesktopWidth / 2);

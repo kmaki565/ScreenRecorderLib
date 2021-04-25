@@ -686,7 +686,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		SetDebugName(pFrameCopy, "FrameCopy");
 
 		if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-			TakeSnapshotsWithVideo(pFrameCopy, sourceFrameDesc, videoInputFrameRect);
+			TakeSnapshotsWithVideo(pFrameCopy, videoInputFrameRect);
 		}
 
 		if (token.is_canceled()) {
@@ -996,7 +996,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			}
 
 			CComPtr<ID3D11Texture2D> pResizedFrameCopy;
-			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, 1920, 1080);
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
 
@@ -1009,7 +1009,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				}
 			}
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-				TakeSnapshotsWithVideo(pResizedFrameCopy, resizedFrameDesc, videoOutputFrameRect);
+				TakeSnapshotsWithVideo(pResizedFrameCopy, videoOutputFrameRect);
 			}
 
 			FrameWriteModel model;
@@ -1043,7 +1043,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
 		CComPtr<ID3D11Texture2D> pResizedPreviousFrameCopy;
-		hr = pResizer->Resize(pPreviousFrameCopy, &pResizedPreviousFrameCopy, 1920, 1080);
+		hr = pResizer->Resize(pPreviousFrameCopy, &pResizedPreviousFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 		RETURN_ON_BAD_HR(hr);
 		pPreviousFrameCopy.Release();
 
@@ -1109,6 +1109,8 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	UINT monitorHeight = (outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE90 || outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE270)
 		? outputDuplDesc.ModeDesc.Width : outputDuplDesc.ModeDesc.Height;
 
+	m_OriginalFrameWidth = monitorWidth;
+	m_OriginalFrameHeight = monitorHeight;
 
 	RECT sourceRect;
 	sourceRect.left = 0;
@@ -1139,8 +1141,8 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	sourceFrameDesc.Usage = D3D11_USAGE_DEFAULT;
 
 	D3D11_TEXTURE2D_DESC resizedDesc;
-	resizedDesc.Width = 1920;
-	resizedDesc.Height = 1080;
+	resizedDesc.Width = m_ScaledFrameWidth;
+	resizedDesc.Height = m_ScaledFrameHeight;
 	resizedDesc.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
 	resizedDesc.ArraySize = 1;
 	resizedDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
@@ -1422,11 +1424,11 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 		RETURN_ON_BAD_HR(MFCreateFile(MF_ACCESSMODE_READWRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, pathString, &pOutStream));
 	};
 
-	UINT sourceWidth = 1920;// max(0, sourceRect.right - sourceRect.left);
-	UINT sourceHeight = 1080; //max(0, sourceRect.bottom - sourceRect.top);
+	UINT sourceWidth = m_ScaledFrameWidth;// max(0, sourceRect.right - sourceRect.left);
+	UINT sourceHeight = m_ScaledFrameHeight; //max(0, sourceRect.bottom - sourceRect.top);
 
-	UINT destWidth = 1920;// max(0, destRect.right - destRect.left);
-	UINT destHeight = 1080;// max(0, destRect.bottom - destRect.top);
+	UINT destWidth = m_ScaledFrameWidth;// max(0, destRect.right - destRect.left);
+	UINT destHeight = m_ScaledFrameHeight;// max(0, destRect.bottom - destRect.top);
 
 	RETURN_ON_BAD_HR(ConfigureOutputMediaTypes(destWidth, destHeight, &pVideoMediaTypeOut, &pAudioMediaTypeOut));
 	RETURN_ON_BAD_HR(ConfigureInputMediaTypes(sourceWidth, sourceHeight, rotationFormat, pVideoMediaTypeOut, &pVideoMediaTypeIn, &pAudioMediaTypeIn));
@@ -1712,7 +1714,7 @@ HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D * frame, mouse_point
 	}
 
 	if (m_IsMousePointerEnabled) {
-		hr = pMousePointer->DrawMousePointer(&ptrInfo, m_ImmediateContext, m_Device, frame, screenRotation);
+		hr = pMousePointer->DrawMousePointer(&ptrInfo, m_ImmediateContext, m_Device, frame, screenRotation, m_OriginalFrameWidth, m_OriginalFrameHeight);
 	}
 	return hr;
 }
@@ -1909,13 +1911,16 @@ void internal_recorder::WriteFrameToImageAsync(_In_ ID3D11Texture2D* pAcquiredDe
 /// <summary>
 /// Take screenshots in a video recording, if video recording is file mode.
 /// </summary>
-HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, D3D11_TEXTURE2D_DESC frameDesc, RECT destRect)
+HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT destRect)
 {
 	if (m_OutputSnapshotsFolderPath.empty())
 		return S_FALSE;
 
 	HRESULT hr = S_OK;
 	CComPtr<ID3D11Texture2D> m_pFrameCopyForSnapshotsWithVideo = nullptr;
+
+	D3D11_TEXTURE2D_DESC frameDesc;
+	frame->GetDesc(&frameDesc);
 
 	int destWidth = destRect.right - destRect.left;
 	int destHeight = destRect.bottom - destRect.top;

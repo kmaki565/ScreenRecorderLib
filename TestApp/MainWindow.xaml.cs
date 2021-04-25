@@ -304,7 +304,9 @@ namespace TestApp
                     EncoderProfile = this.CurrentH264Profile,
                     SnapshotFormat = CurrentImageFormat,
                     SnapshotsWithVideo = this.SnapshotsWithVideo,
-                    SnapshotsInterval = this.SnapshotsIntervalInSec
+                    SnapshotsInterval = this.SnapshotsIntervalInSec,
+                    ScaledFrameWidth = 1920,
+                    ScaledFrameHeight = 1080
                 },
                 DisplayOptions = new DisplayOptions
                 {
