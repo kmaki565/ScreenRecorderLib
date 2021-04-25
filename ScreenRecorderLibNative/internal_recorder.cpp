@@ -995,13 +995,16 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				pFrameCopy.Attach(pCroppedFrameCopy);
 			}
 
-			CComPtr<ID3D11Texture2D> pResizedFrameCopy;
-			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
-			RETURN_ON_BAD_HR(hr);
-			pFrameCopy.Release();
+			if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
+				ID3D11Texture2D *pResizedFrameCopy;
+				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
+				RETURN_ON_BAD_HR(hr);
+				pFrameCopy.Release();
+				pFrameCopy.Attach(pResizedFrameCopy);
+			}
 
 			if (gotMousePointer) {
-				hr = DrawMousePointer(pResizedFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
+				hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
 				if (FAILED(hr)) {
 					_com_error err(hr);
 					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
@@ -1009,12 +1012,12 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				}
 			}
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-				TakeSnapshotsWithVideo(pResizedFrameCopy, videoOutputFrameRect);
+				TakeSnapshotsWithVideo(pFrameCopy, videoOutputFrameRect);
 			}
 
 			FrameWriteModel model;
 			RtlZeroMemory(&model, sizeof(model));
-			model.Frame = pResizedFrameCopy;
+			model.Frame = pFrameCopy;
 			model.Duration = durationSinceLastFrame100Nanos;
 			model.StartPos = lastFrameStartPos;
 			model.Audio = GrabAudioFrame(pLoopbackCaptureOutputDevice, pLoopbackCaptureInputDevice);
@@ -1042,18 +1045,20 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
-		CComPtr<ID3D11Texture2D> pResizedPreviousFrameCopy;
-		hr = pResizer->Resize(pPreviousFrameCopy, &pResizedPreviousFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
-		RETURN_ON_BAD_HR(hr);
-		pPreviousFrameCopy.Release();
-
+		if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
+			ID3D11Texture2D *pResizedFrameCopy;
+			hr = pResizer->Resize(pPreviousFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
+			RETURN_ON_BAD_HR(hr);
+			pPreviousFrameCopy.Release();
+			pPreviousFrameCopy.Attach(pResizedFrameCopy);
+		}
 		if (gotMousePointer) {
-			DrawMousePointer(pResizedPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
+			DrawMousePointer(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
 		}
 
 		FrameWriteModel model;
 		RtlZeroMemory(&model, sizeof(model));
-		model.Frame = pResizedPreviousFrameCopy;
+		model.Frame = pPreviousFrameCopy;
 		model.Duration = duration;
 		model.StartPos = lastFrameStartPos;
 		model.Audio = GrabAudioFrame(pLoopbackCaptureOutputDevice, pLoopbackCaptureInputDevice);
@@ -1424,11 +1429,19 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 		RETURN_ON_BAD_HR(MFCreateFile(MF_ACCESSMODE_READWRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, pathString, &pOutStream));
 	};
 
-	UINT sourceWidth = m_ScaledFrameWidth;// max(0, sourceRect.right - sourceRect.left);
-	UINT sourceHeight = m_ScaledFrameHeight; //max(0, sourceRect.bottom - sourceRect.top);
 
-	UINT destWidth = m_ScaledFrameWidth;// max(0, destRect.right - destRect.left);
-	UINT destHeight = m_ScaledFrameHeight;// max(0, destRect.bottom - destRect.top);
+	UINT sourceWidth = max(0, sourceRect.right - sourceRect.left);
+	UINT sourceHeight = max(0, sourceRect.bottom - sourceRect.top);
+
+	UINT destWidth = max(0, destRect.right - destRect.left);
+	UINT destHeight = max(0, destRect.bottom - destRect.top);
+
+	if (m_ScaledFrameWidth != 0 && m_ScaledFrameHeight != 0) {
+		sourceWidth = m_ScaledFrameWidth;
+		sourceHeight = m_ScaledFrameHeight;
+		destWidth = m_ScaledFrameWidth;
+		destHeight = m_ScaledFrameHeight;
+	}
 
 	RETURN_ON_BAD_HR(ConfigureOutputMediaTypes(destWidth, destHeight, &pVideoMediaTypeOut, &pAudioMediaTypeOut));
 	RETURN_ON_BAD_HR(ConfigureInputMediaTypes(sourceWidth, sourceHeight, rotationFormat, pVideoMediaTypeOut, &pVideoMediaTypeIn, &pAudioMediaTypeIn));

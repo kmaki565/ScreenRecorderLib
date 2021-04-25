@@ -86,14 +86,17 @@ HRESULT Resizer::Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedT
     }
 
     // Create target texture
+    CComPtr<ID3D11Texture2D> pResizedFrame = nullptr;
     D3D11_TEXTURE2D_DESC targetDesc;
     InitializeDesc(targetWidth, targetHeight, &targetDesc);
-    hr = m_Device->CreateTexture2D(&targetDesc, nullptr, pResizedTexture);
+    hr = m_Device->CreateTexture2D(&targetDesc, nullptr, &pResizedFrame);
     RETURN_ON_BAD_HR(hr);
+    *pResizedTexture = pResizedFrame;
+    (*pResizedTexture)->AddRef();
 
     // Make new render target view
     ID3D11RenderTargetView* RTV;
-    hr = m_Device->CreateRenderTargetView(*pResizedTexture, nullptr, &RTV);
+    hr = m_Device->CreateRenderTargetView(pResizedFrame, nullptr, &RTV);
     RETURN_ON_BAD_HR(hr);
 
     m_DeviceContext->OMSetRenderTargets(1, &RTV, nullptr);
