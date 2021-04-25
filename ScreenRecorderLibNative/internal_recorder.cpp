@@ -923,18 +923,12 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 					if (FrameInfo.AccumulatedFrames > 0) {
 						//we got a frame, but it's too soon, so we cache it and see if there are more changes.
 						if (pPreviousFrameCopy == nullptr) {
-							RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&resizedFrameDesc, nullptr, &pPreviousFrameCopy));
+							RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc, nullptr, &pPreviousFrameCopy));
 						}
 						CComPtr<ID3D11Texture2D> pAcquiredDesktopImage = nullptr;
 						RETURN_ON_BAD_HR(hr = pDesktopResource->QueryInterface(IID_PPV_ARGS(&pAcquiredDesktopImage)));
-
-						CComPtr<ID3D11Texture2D> pResizedImage;
-						hr = pResizer->Resize(pAcquiredDesktopImage, &pResizedImage, 1920, 1080);
-						RETURN_ON_BAD_HR(hr);
-
-						m_ImmediateContext->CopyResource(pPreviousFrameCopy, pResizedImage);
+						m_ImmediateContext->CopyResource(pPreviousFrameCopy, pAcquiredDesktopImage);
 						pAcquiredDesktopImage.Release();
-						pResizedImage.Release();
 					}
 				}
 				delay = true;
@@ -965,24 +959,19 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 		lastFrame = steady_clock::now();
 		{
 			CComPtr<ID3D11Texture2D> pFrameCopy = nullptr;
-			RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&resizedFrameDesc, nullptr, &pFrameCopy));
+			RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc, nullptr, &pFrameCopy));
 			CComPtr<ID3D11Texture2D> pAcquiredDesktopImage = nullptr;
 			if (pDesktopResource != nullptr && FrameInfo.AccumulatedFrames > 0) {
 				RETURN_ON_BAD_HR(hr = pDesktopResource->QueryInterface(IID_PPV_ARGS(&pAcquiredDesktopImage)));
 			}
 			if (pAcquiredDesktopImage != nullptr) {
-				CComPtr<ID3D11Texture2D> pResizedImage;
-				hr = pResizer->Resize(pAcquiredDesktopImage, &pResizedImage, 1920, 1080);
-				RETURN_ON_BAD_HR(hr);
-
-				m_ImmediateContext->CopyResource(pFrameCopy, pResizedImage);
+				m_ImmediateContext->CopyResource(pFrameCopy, pAcquiredDesktopImage);
 				if (pPreviousFrameCopy) {
 					pPreviousFrameCopy.Release();
 				}
-				pResizedImage.Release();
 				//Copy new frame to pPreviousFrameCopy
 				if (m_RecorderMode == MODE_VIDEO || m_RecorderMode == MODE_SLIDESHOW) {
-					RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&resizedFrameDesc, nullptr, &pPreviousFrameCopy));
+					RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc, nullptr, &pPreviousFrameCopy));
 					m_ImmediateContext->CopyResource(pPreviousFrameCopy, pFrameCopy);
 					SetDebugName(pPreviousFrameCopy, "PreviousFrameCopy");
 				}
@@ -1014,13 +1003,18 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				pFrameCopy.Attach(pCroppedFrameCopy);
 			}
 
+			CComPtr<ID3D11Texture2D> pResizedFrameCopy;
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, 1920, 1080);
+			RETURN_ON_BAD_HR(hr);
+			pFrameCopy.Release();
+
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-				TakeSnapshotsWithVideo(pFrameCopy, resizedFrameDesc, videoOutputFrameRect);
+				TakeSnapshotsWithVideo(pResizedFrameCopy, resizedFrameDesc, videoOutputFrameRect);
 			}
 
 			FrameWriteModel model;
 			RtlZeroMemory(&model, sizeof(model));
-			model.Frame = pFrameCopy;
+			model.Frame = pResizedFrameCopy;
 			model.Duration = durationSinceLastFrame100Nanos;
 			model.StartPos = lastFrameStartPos;
 			model.Audio = GrabAudioFrame(pLoopbackCaptureOutputDevice, pLoopbackCaptureInputDevice);
@@ -1051,9 +1045,14 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
+		CComPtr<ID3D11Texture2D> pResizedPreviousFrameCopy;
+		hr = pResizer->Resize(pPreviousFrameCopy, &pResizedPreviousFrameCopy, 1920, 1080);
+		RETURN_ON_BAD_HR(hr);
+		pPreviousFrameCopy.Release();
+
 		FrameWriteModel model;
 		RtlZeroMemory(&model, sizeof(model));
-		model.Frame = pPreviousFrameCopy;
+		model.Frame = pResizedPreviousFrameCopy;
 		model.Duration = duration;
 		model.StartPos = lastFrameStartPos;
 		model.Audio = GrabAudioFrame(pLoopbackCaptureOutputDevice, pLoopbackCaptureInputDevice);
@@ -1130,7 +1129,7 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	sourceFrameDesc.Height = monitorHeight;
 	sourceFrameDesc.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
 	sourceFrameDesc.ArraySize = 1;
-	sourceFrameDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
+	sourceFrameDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET | D3D11_BIND_FLAG::D3D11_BIND_SHADER_RESOURCE;
 	sourceFrameDesc.MiscFlags = 0;
 	sourceFrameDesc.SampleDesc.Count = 1;
 	sourceFrameDesc.SampleDesc.Quality = 0;
