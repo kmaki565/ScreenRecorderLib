@@ -736,18 +736,16 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RETURN_ON_BAD_HR(hr = InitializeDesktopDupl(m_Device, pSelectedOutput, &pDeskDupl, &outputDuplDesc));
 	DXGI_MODE_ROTATION screenRotation = outputDuplDesc.Rotation;
 	D3D11_TEXTURE2D_DESC sourceFrameDesc;
-	D3D11_TEXTURE2D_DESC sourceFrameDesc2;
 	D3D11_TEXTURE2D_DESC resizedFrameDesc;
 	D3D11_TEXTURE2D_DESC destFrameDesc;
 	RECT videoInputFrameRect, videoOutputFrameRect;
 
 	RtlZeroMemory(&destFrameDesc, sizeof(destFrameDesc));
 	RtlZeroMemory(&sourceFrameDesc, sizeof(sourceFrameDesc));
-	RtlZeroMemory(&sourceFrameDesc2, sizeof(sourceFrameDesc2));
 	RtlZeroMemory(&videoInputFrameRect, sizeof(videoInputFrameRect));
 	RtlZeroMemory(&videoOutputFrameRect, sizeof(videoOutputFrameRect));
 
-	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &sourceFrameDesc2, &resizedFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
+	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &resizedFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
 	bool isDestRectEqualToSourceRect = EqualRect(&videoInputFrameRect, &videoOutputFrameRect);
 
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
@@ -984,7 +982,14 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 
 			SetDebugName(pFrameCopy, "FrameCopy");
 
-
+			if (gotMousePointer) {
+				hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
+				if (FAILED(hr)) {
+					_com_error err(hr);
+					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
+					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
+				}
+			}
 			if (token.is_canceled()) {
 				DEBUG("Recording task was cancelled");
 				hr = S_OK;
@@ -998,24 +1003,11 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				pFrameCopy.Attach(pCroppedFrameCopy);
 			}
 
-			CComPtr<ID3D11Texture2D> pCopyFrameCopy;
-			RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc2, nullptr, &pCopyFrameCopy));
-			m_ImmediateContext->CopyResource(pCopyFrameCopy, pFrameCopy);
-			
 			CComPtr<ID3D11Texture2D> pResizedFrameCopy;
-			hr = pResizer->Resize(pCopyFrameCopy, &pResizedFrameCopy, 1920, 1080);
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, 1920, 1080);
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
-			pCopyFrameCopy.Release();
 
-			if (gotMousePointer) {
-				hr = DrawMousePointer(pResizedFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
-				if (FAILED(hr)) {
-					_com_error err(hr);
-					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
-					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
-				}
-			}
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
 				TakeSnapshotsWithVideo(pResizedFrameCopy, resizedFrameDesc, videoOutputFrameRect);
 			}
@@ -1044,26 +1036,20 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	//Push the last frame waiting to be recorded to the sink writer.
 	if (pPreviousFrameCopy != nullptr) {
 		INT64 duration = duration_cast<nanoseconds>(chrono::steady_clock::now() - lastFrame).count() / 100;
-
+		if (gotMousePointer) {
+			DrawMousePointer(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
+		}
 		if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT) && !isDestRectEqualToSourceRect) {
 			ID3D11Texture2D *pCroppedFrameCopy;
 			RETURN_ON_BAD_HR(hr = CropFrame(pPreviousFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
-		CComPtr<ID3D11Texture2D> pCopyFrameCopy;
-		RETURN_ON_BAD_HR(hr = m_Device->CreateTexture2D(&sourceFrameDesc2, nullptr, &pCopyFrameCopy));
-		m_ImmediateContext->CopyResource(pCopyFrameCopy, pPreviousFrameCopy);
-
 		CComPtr<ID3D11Texture2D> pResizedPreviousFrameCopy;
-		hr = pResizer->Resize(pCopyFrameCopy, &pResizedPreviousFrameCopy, 1920, 1080);
+		hr = pResizer->Resize(pPreviousFrameCopy, &pResizedPreviousFrameCopy, 1920, 1080);
 		RETURN_ON_BAD_HR(hr);
 		pPreviousFrameCopy.Release();
-		pCopyFrameCopy.Release();
 
-		if (gotMousePointer) {
-			DrawMousePointer(pResizedPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
-		}
 		FrameWriteModel model;
 		RtlZeroMemory(&model, sizeof(model));
 		model.Frame = pResizedPreviousFrameCopy;
@@ -1115,7 +1101,7 @@ std::vector<BYTE> internal_recorder::GrabAudioFrame(std::unique_ptr<loopback_cap
 		return std::vector<BYTE>();
 }
 
-HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out_ D3D11_TEXTURE2D_DESC * pSourceFrameDesc, _Out_ D3D11_TEXTURE2D_DESC* pSourceFrameDesc2, _Out_ D3D11_TEXTURE2D_DESC* pResizedFrameDesc, _Out_ D3D11_TEXTURE2D_DESC * pDestFrameDesc, _Out_ RECT * pSourceRect, _Out_ RECT * pDestRect) {
+HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out_ D3D11_TEXTURE2D_DESC * pSourceFrameDesc, _Out_ D3D11_TEXTURE2D_DESC* pResizedFrameDesc, _Out_ D3D11_TEXTURE2D_DESC * pDestFrameDesc, _Out_ RECT * pSourceRect, _Out_ RECT * pDestRect) {
 	UINT monitorWidth = (outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE90 || outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE270)
 		? outputDuplDesc.ModeDesc.Height : outputDuplDesc.ModeDesc.Width;
 
@@ -1143,26 +1129,13 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	sourceFrameDesc.Height = monitorHeight;
 	sourceFrameDesc.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
 	sourceFrameDesc.ArraySize = 1;
-	sourceFrameDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
+	sourceFrameDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET | D3D11_BIND_FLAG::D3D11_BIND_SHADER_RESOURCE;
 	sourceFrameDesc.MiscFlags = 0;
 	sourceFrameDesc.SampleDesc.Count = 1;
 	sourceFrameDesc.SampleDesc.Quality = 0;
 	sourceFrameDesc.MipLevels = 1;
 	sourceFrameDesc.CPUAccessFlags = 0;
 	sourceFrameDesc.Usage = D3D11_USAGE_DEFAULT;
-
-	D3D11_TEXTURE2D_DESC sourceFrameDesc2;
-	sourceFrameDesc2.Width = monitorWidth;
-	sourceFrameDesc2.Height = monitorHeight;
-	sourceFrameDesc2.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
-	sourceFrameDesc2.ArraySize = 1;
-	sourceFrameDesc2.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET | D3D11_BIND_FLAG::D3D11_BIND_SHADER_RESOURCE;
-	sourceFrameDesc2.MiscFlags = 0;
-	sourceFrameDesc2.SampleDesc.Count = 1;
-	sourceFrameDesc2.SampleDesc.Quality = 0;
-	sourceFrameDesc2.MipLevels = 1;
-	sourceFrameDesc2.CPUAccessFlags = 0;
-	sourceFrameDesc2.Usage = D3D11_USAGE_DEFAULT;
 
 	D3D11_TEXTURE2D_DESC resizedDesc;
 	resizedDesc.Width = 1920;
@@ -1193,7 +1166,6 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	*pSourceRect = sourceRect;
 	*pDestRect = destRect;
 	*pSourceFrameDesc = sourceFrameDesc;
-	*pSourceFrameDesc2 = sourceFrameDesc2;
 	*pResizedFrameDesc = resizedDesc;
 	*pDestFrameDesc = destFrameDesc;
 	return S_OK;

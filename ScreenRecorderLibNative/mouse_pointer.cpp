@@ -192,8 +192,8 @@ HRESULT mouse_pointer::DrawMousePointer(_In_ PTR_INFO* PtrInfo, _In_ ID3D11Devic
 		{ XMFLOAT3(1.0f, 1.0f, 0), XMFLOAT2(1.0f, 0.0f) },
 	};
 
-	INT DesktopWidth = 3840;
-	INT DesktopHeight = 2160;
+	INT DesktopWidth = DesktopDesc.Width;
+	INT DesktopHeight = DesktopDesc.Height;
 
 	// Center of desktop dimensions
 	INT CenterX = (DesktopWidth / 2);
