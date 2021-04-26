@@ -736,7 +736,6 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RETURN_ON_BAD_HR(hr = InitializeDesktopDupl(m_Device, pSelectedOutput, &pDeskDupl, &outputDuplDesc));
 	DXGI_MODE_ROTATION screenRotation = outputDuplDesc.Rotation;
 	D3D11_TEXTURE2D_DESC sourceFrameDesc;
-	D3D11_TEXTURE2D_DESC resizedFrameDesc;
 	D3D11_TEXTURE2D_DESC destFrameDesc;
 	RECT videoInputFrameRect, videoOutputFrameRect;
 
@@ -745,7 +744,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RtlZeroMemory(&videoInputFrameRect, sizeof(videoInputFrameRect));
 	RtlZeroMemory(&videoOutputFrameRect, sizeof(videoOutputFrameRect));
 
-	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &resizedFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
+	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
 	bool isDestRectEqualToSourceRect = EqualRect(&videoInputFrameRect, &videoOutputFrameRect);
 
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
@@ -1107,7 +1106,7 @@ std::vector<BYTE> internal_recorder::GrabAudioFrame(std::unique_ptr<loopback_cap
 		return std::vector<BYTE>();
 }
 
-HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out_ D3D11_TEXTURE2D_DESC * pSourceFrameDesc, _Out_ D3D11_TEXTURE2D_DESC* pResizedFrameDesc, _Out_ D3D11_TEXTURE2D_DESC * pDestFrameDesc, _Out_ RECT * pSourceRect, _Out_ RECT * pDestRect) {
+HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out_ D3D11_TEXTURE2D_DESC * pSourceFrameDesc, _Out_ D3D11_TEXTURE2D_DESC * pDestFrameDesc, _Out_ RECT * pSourceRect, _Out_ RECT * pDestRect) {
 	UINT monitorWidth = (outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE90 || outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE270)
 		? outputDuplDesc.ModeDesc.Height : outputDuplDesc.ModeDesc.Width;
 
@@ -1145,19 +1144,6 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	sourceFrameDesc.CPUAccessFlags = 0;
 	sourceFrameDesc.Usage = D3D11_USAGE_DEFAULT;
 
-	D3D11_TEXTURE2D_DESC resizedDesc;
-	resizedDesc.Width = m_ScaledFrameWidth;
-	resizedDesc.Height = m_ScaledFrameHeight;
-	resizedDesc.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
-	resizedDesc.ArraySize = 1;
-	resizedDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
-	resizedDesc.MiscFlags = 0;
-	resizedDesc.SampleDesc.Count = 1;
-	resizedDesc.SampleDesc.Quality = 0;
-	resizedDesc.MipLevels = 1;
-	resizedDesc.CPUAccessFlags = 0;
-	resizedDesc.Usage = D3D11_USAGE_DEFAULT;
-
 	D3D11_TEXTURE2D_DESC destFrameDesc;
 	destFrameDesc.Width = destRect.right - destRect.left;
 	destFrameDesc.Height = destRect.bottom - destRect.top;
@@ -1174,7 +1160,6 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	*pSourceRect = sourceRect;
 	*pDestRect = destRect;
 	*pSourceFrameDesc = sourceFrameDesc;
-	*pResizedFrameDesc = resizedDesc;
 	*pDestFrameDesc = destFrameDesc;
 	return S_OK;
 }
