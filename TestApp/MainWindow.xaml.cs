@@ -261,6 +261,10 @@ namespace TestApp
             Int32.TryParse(this.RecordingAreaLeftTextBox.Text, out left);
             int top = 0;
             Int32.TryParse(this.RecordingAreaTopTextBox.Text, out top);
+            int scaledWidth = 0;
+            Int32.TryParse(this.ScaledWidthTextBox.Text, out scaledWidth);
+            int scaledHeight = 0;
+            Int32.TryParse(this.ScaledHeightTextBox.Text, out scaledHeight);
 
             Display selectedDisplay = (Display)this.ScreenComboBox.SelectedItem;
 
@@ -305,8 +309,8 @@ namespace TestApp
                     SnapshotFormat = CurrentImageFormat,
                     SnapshotsWithVideo = this.SnapshotsWithVideo,
                     SnapshotsInterval = this.SnapshotsIntervalInSec,
-                    ScaledFrameWidth = 1920,
-                    ScaledFrameHeight = 1080
+                    ScaledFrameWidth = scaledWidth,
+                    ScaledFrameHeight = scaledHeight
                 },
                 DisplayOptions = new DisplayOptions
                 {
