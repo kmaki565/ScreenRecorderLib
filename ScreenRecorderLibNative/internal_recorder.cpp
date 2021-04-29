@@ -519,6 +519,9 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 	RETURN_ON_BAD_HR(hr = pMousePointer->Initialize(m_ImmediateContext, m_Device));
 	mouse_pointer::PTR_INFO PtrInfo{};
 
+	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
+	RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
+
 	pCapture->ClearFrameBuffer();
 	if (pLoopbackCaptureOutputDevice)
 		pLoopbackCaptureOutputDevice->ClearRecordedBytes();
@@ -562,7 +565,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 			surfaceTexture->GetDesc(&sourceFrameDesc);
 			// Clear flags that we don't need
 			sourceFrameDesc.Usage = D3D11_USAGE_DEFAULT;
-			sourceFrameDesc.BindFlags = D3D11_BIND_RENDER_TARGET;
+			sourceFrameDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 			sourceFrameDesc.CPUAccessFlags = 0;
 			sourceFrameDesc.MiscFlags = 0;
 
@@ -681,6 +684,14 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 				ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
 				//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
 			}
+		}
+
+		if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
+			ID3D11Texture2D* pResizedFrameCopy;
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
+			RETURN_ON_BAD_HR(hr);
+			pFrameCopy.Release();
+			pFrameCopy.Attach(pResizedFrameCopy);
 		}
 
 		SetDebugName(pFrameCopy, "FrameCopy");
