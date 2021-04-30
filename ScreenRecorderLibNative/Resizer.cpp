@@ -64,7 +64,7 @@ HRESULT Resizer::Initialize(ID3D11DeviceContext* ImmediateContext, ID3D11Device*
     return S_OK;
 }
 
-HRESULT Resizer::Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedTexture, UINT targetWidth, UINT targetHeight)
+HRESULT Resizer::Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedTexture, UINT targetWidth, UINT targetHeight, double viewPortRatio_width, double viewPortRatio_height)
 {
     HRESULT hr;
 
@@ -102,7 +102,7 @@ HRESULT Resizer::Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedT
     m_DeviceContext->OMSetRenderTargets(1, &RTV, nullptr);
 
     // Set view port
-    SetViewPort(targetWidth, targetHeight);
+    SetViewPort(targetWidth, targetHeight, viewPortRatio_width, viewPortRatio_height);
 
     // Vertices for drawing whole texture
     VERTEX Vertices[] =
@@ -181,11 +181,11 @@ HRESULT Resizer::InitializeDesc(_In_ UINT width, _In_ UINT height, _Out_ D3D11_T
     return S_OK;
 }
 
-void Resizer::SetViewPort(UINT width, UINT height)
+void Resizer::SetViewPort(UINT width, UINT height, double viewPortRatio_width, double viewPortRatio_height)
 {
     D3D11_VIEWPORT VP;
-    VP.Width = static_cast<FLOAT>(width);
-    VP.Height = static_cast<FLOAT>(height);
+    VP.Width = static_cast<FLOAT>(width * viewPortRatio_width);
+    VP.Height = static_cast<FLOAT>(height * viewPortRatio_height);
     VP.MinDepth = 0.0f;
     VP.MaxDepth = 1.0f;
     VP.TopLeftX = 0;

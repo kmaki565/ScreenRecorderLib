@@ -22,10 +22,10 @@ public:
 	Resizer();
 	~Resizer();
     HRESULT Initialize(ID3D11DeviceContext* ImmediateContext, ID3D11Device* Device);
-    HRESULT Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedTexture, UINT targetWidth, UINT targetHeight);
+    HRESULT Resize(ID3D11Texture2D* orgTexture, ID3D11Texture2D** pResizedTexture, UINT targetWidth, UINT targetHeight, double viewPortRatio_width = 1.0, double viewPortRatio_height = 1.0);
 
 private:
-    void SetViewPort(UINT width, UINT height);
+    void SetViewPort(UINT width, UINT height, double viewPortRatio_width, double viewPortRatio_height);
     HRESULT InitShaders();
     HRESULT InitializeDesc(_In_ UINT width, _In_ UINT height, _Out_ D3D11_TEXTURE2D_DESC* pTargetDesc);
     void CleanRefs();

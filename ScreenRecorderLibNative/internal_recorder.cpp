@@ -557,8 +557,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		auto frame = pCapture->TryGetNextFrame();
 
 		winrt::com_ptr<ID3D11Texture2D> surfaceTexture = nullptr;
-		UINT contentWidth = 0;
-		UINT contentHeight = 0;
+
 		if (frame) {
 			auto contentSize = frame.ContentSize();
 			surfaceTexture = capture::util::GetDXGIInterfaceFromObject<ID3D11Texture2D>(frame.Surface());
@@ -568,9 +567,6 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 			sourceFrameDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
 			sourceFrameDesc.CPUAccessFlags = 0;
 			sourceFrameDesc.MiscFlags = 0;
-
-			contentWidth = contentSize.Width;
-			contentHeight = contentSize.Height;
 
 			videoInputFrameRect.right = contentSize.Width - videoInputFrameRect.left;
 			videoInputFrameRect.bottom = contentSize.Height - videoInputFrameRect.top;
@@ -688,7 +684,9 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 
 		if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
 			ID3D11Texture2D* pResizedFrameCopy;
-			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight,
+				(double)sourceFrameDesc.Width / (double)(videoInputFrameRect.right - videoInputFrameRect.left),
+				(double)sourceFrameDesc.Height / (double)(videoInputFrameRect.bottom - videoInputFrameRect.top));
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
 			pFrameCopy.Attach(pResizedFrameCopy);
