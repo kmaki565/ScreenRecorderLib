@@ -159,6 +159,7 @@ namespace ScreenRecorderLib {
 			SnapshotsInterval = 10;
 			ScaledFrameWidth = 0;
 			ScaledFrameHeight = 0;
+			ScaledFrameRatio = 1.0;
 		}
 		property H264Profile EncoderProfile;
 		/// <summary>
@@ -194,13 +195,18 @@ namespace ScreenRecorderLib {
 		/// </summary>
 		property int SnapshotsInterval;
 		/// <summary>
-		///If non-zero, represents frame width to resize.
+		///If non-zero, represents target frame width to resize.
 		/// </summary>
 		property int ScaledFrameWidth;
 		/// <summary>
-		///If non-zero, represents frame height to resize.
+		///If non-zero, represents target frame height to resize.
 		/// </summary>
 		property int ScaledFrameHeight;
+		/// <summary>
+		///Specifies scaling ratio with which original frames are resized. 
+		///Will be ignored if non-zero values are specified both for ScaledFrameWidth and ScaledFrameHeight.
+		/// </summary>
+		property float ScaledFrameRatio;
 	};
 	public ref class AudioOptions {
 	public:

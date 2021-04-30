@@ -170,6 +170,21 @@ std::wstring internal_recorder::GetVideoExtension() {
 	return L".mp4";
 }
 
+void internal_recorder::DetermineScalingParameters(int originalWidth, int originalHeight)
+{
+	//TODO: Even width and height
+	if (m_ScaledFrameWidth != 0 && m_ScaledFrameHeight != 0) {
+		m_IsScalingEnabled = true;
+	}
+	else if (m_ScaledFrameRatio != 1.0) {
+		m_ScaledFrameWidth = static_cast<UINT32>(originalWidth * m_ScaledFrameRatio);
+		m_ScaledFrameHeight = static_cast<UINT32>(originalHeight * m_ScaledFrameRatio);
+		m_IsScalingEnabled = true;
+	}
+	else 
+		m_IsScalingEnabled = false;
+}
+
 HRESULT internal_recorder::ConfigureOutputDir(std::wstring path) {
 	m_OutputFullPath = path;
 	wstring dir = path;
@@ -494,6 +509,12 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 	//These values will be overwritten on a frame by frame basis.
 	videoInputFrameRect.right += 2;
 	videoInputFrameRect.bottom += 2;
+
+	DetermineScalingParameters(videoOutputFrameRect.right - videoOutputFrameRect.left, videoOutputFrameRect.bottom - videoOutputFrameRect.top);
+	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
+	if (m_IsScalingEnabled)
+		RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
+
 	HANDLE hMarkEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	m_FinalizeEvent = CreateEvent(NULL, FALSE, FALSE, NULL);
 	if (m_RecorderMode == MODE_VIDEO) {
@@ -518,9 +539,6 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
 	RETURN_ON_BAD_HR(hr = pMousePointer->Initialize(m_ImmediateContext, m_Device));
 	mouse_pointer::PTR_INFO PtrInfo{};
-
-	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
-	RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
 
 	pCapture->ClearFrameBuffer();
 	if (pLoopbackCaptureOutputDevice)
@@ -682,11 +700,11 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 			}
 		}
 
-		if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
+		if (m_IsScalingEnabled) {
 			ID3D11Texture2D* pResizedFrameCopy;
 			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight,
-				(double)sourceFrameDesc.Width / (double)(videoInputFrameRect.right - videoInputFrameRect.left),
-				(double)sourceFrameDesc.Height / (double)(videoInputFrameRect.bottom - videoInputFrameRect.top));
+				(double)sourceFrameDesc.Width / ((double)videoInputFrameRect.right - (double)videoInputFrameRect.left),
+				(double)sourceFrameDesc.Height / ((double)videoInputFrameRect.bottom - (double)videoInputFrameRect.top));
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
 			pFrameCopy.Attach(pResizedFrameCopy);
@@ -756,15 +774,17 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
 	bool isDestRectEqualToSourceRect = EqualRect(&videoInputFrameRect, &videoOutputFrameRect);
 
+	DetermineScalingParameters(videoOutputFrameRect.right - videoOutputFrameRect.left, videoOutputFrameRect.bottom - videoOutputFrameRect.top);
+	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
+	if (m_IsScalingEnabled)
+		RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
+
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
 	RETURN_ON_BAD_HR(hr = pMousePointer->Initialize(m_ImmediateContext, m_Device));
 	SetViewPort(m_ImmediateContext, videoInputFrameRect.right - videoInputFrameRect.left, videoInputFrameRect.bottom - videoInputFrameRect.top);
 
 	mouse_pointer::PTR_INFO PtrInfo;
 	RtlZeroMemory(&PtrInfo, sizeof(PtrInfo));
-
-	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
-	RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
 
 	if (m_RecorderMode == MODE_VIDEO) {
 		loopback_capture *outputCapture = nullptr;
@@ -996,14 +1016,14 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				break;
 			}
 
-			if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT) && !isDestRectEqualToSourceRect) {
+			if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT || m_IsScalingEnabled) && !isDestRectEqualToSourceRect) {
 				ID3D11Texture2D *pCroppedFrameCopy;
 				RETURN_ON_BAD_HR(hr = CropFrame(pFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
 				pFrameCopy.Release();
 				pFrameCopy.Attach(pCroppedFrameCopy);
 			}
 
-			if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
+			if (m_IsScalingEnabled) {
 				ID3D11Texture2D *pResizedFrameCopy;
 				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 				RETURN_ON_BAD_HR(hr);
@@ -1047,13 +1067,13 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	//Push the last frame waiting to be recorded to the sink writer.
 	if (pPreviousFrameCopy != nullptr) {
 		INT64 duration = duration_cast<nanoseconds>(chrono::steady_clock::now() - lastFrame).count() / 100;
-		if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT) && !isDestRectEqualToSourceRect) {
+		if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT || m_IsScalingEnabled) && !isDestRectEqualToSourceRect) {
 			ID3D11Texture2D *pCroppedFrameCopy;
 			RETURN_ON_BAD_HR(hr = CropFrame(pPreviousFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
-		if (m_ScaledFrameHeight != 0 && m_ScaledFrameWidth != 0) {
+		if (m_IsScalingEnabled) {
 			ID3D11Texture2D *pResizedFrameCopy;
 			hr = pResizer->Resize(pPreviousFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 			RETURN_ON_BAD_HR(hr);
@@ -1158,7 +1178,7 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 	destFrameDesc.Height = destRect.bottom - destRect.top;
 	destFrameDesc.Format = DXGI_FORMAT::DXGI_FORMAT_B8G8R8A8_UNORM;
 	destFrameDesc.ArraySize = 1;
-	destFrameDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET;
+	destFrameDesc.BindFlags = D3D11_BIND_FLAG::D3D11_BIND_RENDER_TARGET | D3D11_BIND_FLAG::D3D11_BIND_SHADER_RESOURCE;
 	destFrameDesc.MiscFlags = 0;
 	destFrameDesc.SampleDesc.Count = 1;
 	destFrameDesc.SampleDesc.Quality = 0;
@@ -1430,9 +1450,10 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 	UINT destWidth = max(0, destRect.right - destRect.left);
 	UINT destHeight = max(0, destRect.bottom - destRect.top);
 
-	if (m_ScaledFrameWidth != 0 && m_ScaledFrameHeight != 0) {
+	if (m_IsScalingEnabled) {
 		sourceWidth = m_ScaledFrameWidth;
 		sourceHeight = m_ScaledFrameHeight;
+		//We won't use SetSourceRectangle to crop when the scaling option is enabled.
 		destWidth = m_ScaledFrameWidth;
 		destHeight = m_ScaledFrameHeight;
 	}
@@ -1931,17 +1952,16 @@ HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT d
 
 	int destWidth = destRect.right - destRect.left;
 	int destHeight = destRect.bottom - destRect.top;
-	if (frameDesc.Width != destWidth
-		|| frameDesc.Height != destHeight) {
+	if (m_IsScalingEnabled || frameDesc.Width == destWidth && frameDesc.Height == destHeight) {
+		m_Device->CreateTexture2D(&frameDesc, nullptr, &m_pFrameCopyForSnapshotsWithVideo);
+		// Copy the current frame for a separate thread to write it to a file asynchronously.
+		m_ImmediateContext->CopyResource(m_pFrameCopyForSnapshotsWithVideo, frame);
+	}
+	else {
 		//If the source frame is larger than the destionation rect, we crop it, to avoid black borders around the snapshots.
 		frameDesc.Width = min(destWidth, frameDesc.Width);
 		frameDesc.Height = min(destHeight, frameDesc.Height);
 		RETURN_ON_BAD_HR(hr = CropFrame(frame, frameDesc, destRect, &m_pFrameCopyForSnapshotsWithVideo));
-	}
-	else {
-		m_Device->CreateTexture2D(&frameDesc, nullptr, &m_pFrameCopyForSnapshotsWithVideo);
-		// Copy the current frame for a separate thread to write it to a file asynchronously.
-		m_ImmediateContext->CopyResource(m_pFrameCopyForSnapshotsWithVideo, frame);
 	}
 
 	m_previousSnapshotTaken = steady_clock::now();
