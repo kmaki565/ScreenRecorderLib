@@ -1453,7 +1453,7 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 	if (m_IsScalingEnabled) {
 		sourceWidth = m_ScaledFrameWidth;
 		sourceHeight = m_ScaledFrameHeight;
-		//We won't use SetSourceRectangle to crop when the scaling option is enabled.
+		//We'll leverage CopySubresourceRegion instead of SetSourceRectangle to crop when the scaling option is enabled.
 		destWidth = m_ScaledFrameWidth;
 		destHeight = m_ScaledFrameHeight;
 	}

@@ -129,15 +129,19 @@
                             Click="RefreshButton_Click"/>
                 </DockPanel>
                 <StackPanel Orientation="Horizontal">
-                    <Label Content="Scaled width"/>
+                    <Label Content="Scale to:   width"/>
                     <TextBox x:Name="ScaledWidthTextBox"
                              VerticalContentAlignment="Center"
-                             GotFocus="TextBox_GotFocus"
+                             TextChanged="ScaledWidthTextBox_TextChanged"
                              MinWidth="30" Height="25"/>
-                    <Label Content="Scaled height"/>
+                    <Label Content="height"/>
                     <TextBox x:Name="ScaledHeightTextBox"
                              VerticalContentAlignment="Center"
-                             GotFocus="TextBox_GotFocus"
+                             TextChanged="ScaledHeightTextBox_TextChanged"
+                             MinWidth="30" Height="25"/>
+                    <Label Content="ratio" Margin="10,0,0,0"/>
+                    <TextBox x:Name="ScaledFrameRatioTextBox"
+                             VerticalContentAlignment="Center"
                              MinWidth="30" Height="25"/>
                 </StackPanel>
                 

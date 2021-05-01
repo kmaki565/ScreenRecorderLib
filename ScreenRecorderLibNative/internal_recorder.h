@@ -142,7 +142,7 @@ public:
 	void SetSnapthotsWithVideoInterval(UINT32 value) { m_SnapshotsWithVideoInterval = std::chrono::seconds(value); }
 	void SetScaledFrameWidth(UINT32 value) { m_ScaledFrameWidth = value; }
 	void SetScaledFrameHeight(UINT32 value) { m_ScaledFrameHeight = value; }
-	void SetScaledFrameRatio(float value) { m_ScaledFrameRatio = value; }
+	void SetScaledFrameRatio(double value) { m_ScaledFrameRatio = value; }
 	static bool SetExcludeFromCapture(HWND hwnd, bool isExcluded);
 
 	[[deprecated]]
@@ -218,7 +218,7 @@ private:
 	std::chrono::seconds m_SnapshotsWithVideoInterval = std::chrono::seconds(10);
 	UINT32 m_ScaledFrameWidth = 0;
 	UINT32 m_ScaledFrameHeight = 0;
-	float m_ScaledFrameRatio = 1.0;
+	double m_ScaledFrameRatio = 1.0;
 	bool m_IsScalingEnabled = false;
 	UINT32 m_OriginalFrameWidth = 0;
 	UINT32 m_OriginalFrameHeight = 0;

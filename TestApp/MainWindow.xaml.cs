@@ -265,6 +265,10 @@ namespace TestApp
             Int32.TryParse(this.ScaledWidthTextBox.Text, out scaledWidth);
             int scaledHeight = 0;
             Int32.TryParse(this.ScaledHeightTextBox.Text, out scaledHeight);
+            double scaledFrameRatio;
+            Double.TryParse(this.ScaledFrameRatioTextBox.Text, out scaledFrameRatio);
+            if (scaledFrameRatio == 0)
+                scaledFrameRatio = 1;
 
             Display selectedDisplay = (Display)this.ScreenComboBox.SelectedItem;
 
@@ -310,7 +314,8 @@ namespace TestApp
                     SnapshotsWithVideo = this.SnapshotsWithVideo,
                     SnapshotsInterval = this.SnapshotsIntervalInSec,
                     ScaledFrameWidth = scaledWidth,
-                    ScaledFrameHeight = scaledHeight
+                    ScaledFrameHeight = scaledHeight,
+                    ScaledFrameRatio = scaledFrameRatio
                 },
                 DisplayOptions = new DisplayOptions
                 {
@@ -693,6 +698,23 @@ namespace TestApp
 
             AudioOutputsComboBox.SelectedIndex = 0;
             AudioInputsComboBox.SelectedIndex = 0;
+        }
+
+        private void ScaledWidthTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ScaledFrameRatioTextBox.IsEnabled = !IsValidSizeInScaledWidthHeight();
+        }
+        private void ScaledHeightTextBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ScaledFrameRatioTextBox.IsEnabled = !IsValidSizeInScaledWidthHeight();
+        }
+        private bool IsValidSizeInScaledWidthHeight()
+        {
+            int width = 0;
+            Int32.TryParse(this.ScaledWidthTextBox.Text, out width);
+            int height = 0;
+            Int32.TryParse(this.ScaledHeightTextBox.Text, out height);
+            return width != 0 && height != 0;
         }
     }
 

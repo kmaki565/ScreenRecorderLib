@@ -206,7 +206,7 @@ namespace ScreenRecorderLib {
 		///Specifies scaling ratio with which original frames are resized. 
 		///Will be ignored if non-zero values are specified both for ScaledFrameWidth and ScaledFrameHeight.
 		/// </summary>
-		property float ScaledFrameRatio;
+		property double ScaledFrameRatio;
 	};
 	public ref class AudioOptions {
 	public:
