@@ -172,13 +172,14 @@ std::wstring internal_recorder::GetVideoExtension() {
 
 void internal_recorder::DetermineScalingParameters(int originalWidth, int originalHeight)
 {
-	//TODO: Even width and height
 	if (m_ScaledFrameWidth != 0 && m_ScaledFrameHeight != 0) {
+		m_ScaledFrameWidth = MakeEven(m_ScaledFrameWidth);
+		m_ScaledFrameHeight = MakeEven(m_ScaledFrameHeight);
 		m_IsScalingEnabled = true;
 	}
 	else if (m_ScaledFrameRatio != 1.0) {
-		m_ScaledFrameWidth = static_cast<UINT32>(originalWidth * m_ScaledFrameRatio);
-		m_ScaledFrameHeight = static_cast<UINT32>(originalHeight * m_ScaledFrameRatio);
+		m_ScaledFrameWidth = MakeEven(static_cast<UINT32>(originalWidth * m_ScaledFrameRatio));
+		m_ScaledFrameHeight = MakeEven(static_cast<UINT32>(originalHeight * m_ScaledFrameRatio));
 		m_IsScalingEnabled = true;
 	}
 	else 
