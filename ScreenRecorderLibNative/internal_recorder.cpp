@@ -1025,10 +1025,18 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				ID3D11Texture2D *pResizedFrameCopy;
 				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 				RETURN_ON_BAD_HR(hr);
+				if (gotMousePointer) {
+					hr = DrawMousePointer(pResizedFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, pFrameCopy);
+					if (FAILED(hr)) {
+						_com_error err(hr);
+						ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
+						//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
+					}
+				}
 				pFrameCopy.Release();
 				pFrameCopy.Attach(pResizedFrameCopy);
 			}
-			if (gotMousePointer) {
+			else if (gotMousePointer) {
 				hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation);
 				if (FAILED(hr)) {
 					_com_error err(hr);
@@ -1036,6 +1044,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
 				}
 			}
+
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
 				TakeSnapshotsWithVideo(pFrameCopy, videoOutputFrameRect);
 			}
@@ -1064,23 +1073,31 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	//Push the last frame waiting to be recorded to the sink writer.
 	if (pPreviousFrameCopy != nullptr) {
 		INT64 duration = duration_cast<nanoseconds>(chrono::steady_clock::now() - lastFrame).count() / 100;
+		if (gotMousePointer) {
+			DrawMouseClick(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
+		}
 		if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT || m_IsScalingEnabled) && !isDestRectEqualToSourceRect) {
 			ID3D11Texture2D *pCroppedFrameCopy;
 			RETURN_ON_BAD_HR(hr = CropFrame(pPreviousFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
-		if (gotMousePointer) {
-			DrawMouseClick(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
-		}
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D *pResizedFrameCopy;
 			hr = pResizer->Resize(pPreviousFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 			RETURN_ON_BAD_HR(hr);
+			if (gotMousePointer) {
+				hr = DrawMousePointer(pResizedFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, pPreviousFrameCopy);
+				if (FAILED(hr)) {
+					_com_error err(hr);
+					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
+					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
+				}
+			}
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pResizedFrameCopy);
 		}
-		if (gotMousePointer) {
+		else if (gotMousePointer) {
 			DrawMousePointer(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation);
 		}
 
@@ -1141,9 +1158,6 @@ HRESULT internal_recorder::InitializeDesc(DXGI_OUTDUPL_DESC outputDuplDesc, _Out
 
 	UINT monitorHeight = (outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE90 || outputDuplDesc.Rotation == DXGI_MODE_ROTATION_ROTATE270)
 		? outputDuplDesc.ModeDesc.Width : outputDuplDesc.ModeDesc.Height;
-
-	m_OriginalFrameWidth = monitorWidth;
-	m_OriginalFrameHeight = monitorHeight;
 
 	RECT sourceRect;
 	sourceRect.left = 0;
@@ -1742,13 +1756,20 @@ HRESULT internal_recorder::DrawMouseClick(ID3D11Texture2D* frame, mouse_pointer*
 	}
 	return hr;
 }
-HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D* frame, mouse_pointer* pMousePointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation)
+HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D* targetTexture, mouse_pointer* pMousePointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation, ID3D11Texture2D* desktopTexture)
 {
-	HRESULT hr = S_FALSE;
-	if (m_IsMousePointerEnabled) {
-		hr = pMousePointer->DrawMousePointer(&ptrInfo, m_ImmediateContext, m_Device, frame, screenRotation, m_OriginalFrameWidth, m_OriginalFrameHeight);
+	if (!m_IsMousePointerEnabled)
+		return S_FALSE;
+
+	if (m_IsScalingEnabled) {
+		//Adjust pointer position since we CropFrame when scaling is enabled. Exit if it's out of range.
+		if (ptrInfo.Position.x > m_DestRect.right || ptrInfo.Position.y > m_DestRect.bottom)
+			return S_FALSE;
+		ptrInfo.Position.x -= m_DestRect.left;
+		ptrInfo.Position.y -= m_DestRect.top;
 	}
-	return hr;
+
+	return pMousePointer->DrawMousePointer(&ptrInfo, m_ImmediateContext, m_Device, targetTexture, screenRotation, desktopTexture);
 }
 
 HRESULT internal_recorder::CropFrame(ID3D11Texture2D *frame, D3D11_TEXTURE2D_DESC frameDesc, RECT destRect, ID3D11Texture2D **pCroppedFrame)
