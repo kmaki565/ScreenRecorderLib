@@ -693,12 +693,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		}
 
 		if (gotMousePointer) {
-			hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, DXGI_MODE_ROTATION_IDENTITY, durationSinceLastFrame100Nanos);
-			if (FAILED(hr)) {
-				_com_error err(hr);
-				ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
-				//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
-			}
+			DrawMouseClick(pFrameCopy, pMousePointer.get(), PtrInfo, DXGI_MODE_ROTATION_IDENTITY, durationSinceLastFrame100Nanos);
 		}
 
 		if (m_IsScalingEnabled) {
@@ -1017,13 +1012,15 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				break;
 			}
 
+			if (gotMousePointer) {
+				DrawMouseClick(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
+			}
 			if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT || m_IsScalingEnabled) && !isDestRectEqualToSourceRect) {
 				ID3D11Texture2D *pCroppedFrameCopy;
 				RETURN_ON_BAD_HR(hr = CropFrame(pFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
 				pFrameCopy.Release();
 				pFrameCopy.Attach(pCroppedFrameCopy);
 			}
-
 			if (m_IsScalingEnabled) {
 				ID3D11Texture2D *pResizedFrameCopy;
 				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
@@ -1031,9 +1028,8 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				pFrameCopy.Release();
 				pFrameCopy.Attach(pResizedFrameCopy);
 			}
-
 			if (gotMousePointer) {
-				hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
+				hr = DrawMousePointer(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation);
 				if (FAILED(hr)) {
 					_com_error err(hr);
 					ERROR(L"Error drawing mouse pointer: %s", err.ErrorMessage());
@@ -1074,6 +1070,9 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pCroppedFrameCopy);
 		}
+		if (gotMousePointer) {
+			DrawMouseClick(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
+		}
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D *pResizedFrameCopy;
 			hr = pResizer->Resize(pPreviousFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
@@ -1082,7 +1081,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			pPreviousFrameCopy.Attach(pResizedFrameCopy);
 		}
 		if (gotMousePointer) {
-			DrawMousePointer(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, duration);
+			DrawMousePointer(pPreviousFrameCopy, pMousePointer.get(), PtrInfo, screenRotation);
 		}
 
 		FrameWriteModel model;
@@ -1723,7 +1722,7 @@ HRESULT internal_recorder::CreateInputMediaTypeFromOutput(
 	return hr;
 }
 
-HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D * frame, mouse_pointer * pMousePointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation, INT64 durationSinceLastFrame100Nanos)
+HRESULT internal_recorder::DrawMouseClick(ID3D11Texture2D* frame, mouse_pointer* pMousePointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation, INT64 durationSinceLastFrame100Nanos)
 {
 	HRESULT hr = S_FALSE;
 	if (g_LastMouseClickDurationRemaining > 0
@@ -1741,7 +1740,11 @@ HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D * frame, mouse_point
 		g_LastMouseClickDurationRemaining = max(g_LastMouseClickDurationRemaining - millis, 0);
 		DEBUG("Drawing mouse click, duration remaining on click is %u ms", g_LastMouseClickDurationRemaining);
 	}
-
+	return hr;
+}
+HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D* frame, mouse_pointer* pMousePointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation)
+{
+	HRESULT hr = S_FALSE;
 	if (m_IsMousePointerEnabled) {
 		hr = pMousePointer->DrawMousePointer(&ptrInfo, m_ImmediateContext, m_Device, frame, screenRotation, m_OriginalFrameWidth, m_OriginalFrameHeight);
 	}
