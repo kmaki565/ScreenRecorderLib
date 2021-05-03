@@ -1763,7 +1763,8 @@ HRESULT internal_recorder::DrawMousePointer(ID3D11Texture2D* targetTexture, mous
 
 	if (m_IsScalingEnabled) {
 		//Adjust pointer position since we CropFrame when scaling is enabled. Exit if it's out of range.
-		if (ptrInfo.Position.x > m_DestRect.right || ptrInfo.Position.y > m_DestRect.bottom)
+		if (ptrInfo.Position.x < m_DestRect.left || ptrInfo.Position.x > m_DestRect.right || 
+			ptrInfo.Position.y < m_DestRect.top || ptrInfo.Position.y > m_DestRect.bottom)
 			return S_FALSE;
 		ptrInfo.Position.x -= m_DestRect.left;
 		ptrInfo.Position.y -= m_DestRect.top;
