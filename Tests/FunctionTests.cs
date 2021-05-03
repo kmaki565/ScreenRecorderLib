@@ -470,7 +470,6 @@ namespace ScreenRecorderLib
             }
         }
 
-
         [TestMethod]
         public void ScreenshotTestWithResize()
         {
@@ -801,7 +800,6 @@ namespace ScreenRecorderLib
                 Directory.Delete(snapshotsDir, recursive: true);
             }
         }
-
 
         [TestMethod]
         public void RecordingToFileWithResizeGraphicsCaptureApiTest()

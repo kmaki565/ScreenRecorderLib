@@ -170,6 +170,7 @@ std::wstring internal_recorder::GetVideoExtension() {
 	return L".mp4";
 }
 
+//Updates member variables for scaling. Scaling ratio will be ignored if absolute width and height are specified.
 void internal_recorder::DetermineScalingParameters(int originalWidth, int originalHeight)
 {
 	if (m_ScaledFrameWidth != 0 && m_ScaledFrameHeight != 0) {
@@ -583,7 +584,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 			surfaceTexture->GetDesc(&sourceFrameDesc);
 			// Clear flags that we don't need
 			sourceFrameDesc.Usage = D3D11_USAGE_DEFAULT;
-			sourceFrameDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;
+			sourceFrameDesc.BindFlags = D3D11_BIND_RENDER_TARGET | D3D11_BIND_SHADER_RESOURCE;	//Frames to be put to shader when resized.
 			sourceFrameDesc.CPUAccessFlags = 0;
 			sourceFrameDesc.MiscFlags = 0;
 
@@ -698,6 +699,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D* pResizedFrameCopy;
+			//Adjusting view port is necessary as the input size is varied along with content size.
 			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight,
 				(double)sourceFrameDesc.Width / ((double)videoInputFrameRect.right - (double)videoInputFrameRect.left),
 				(double)sourceFrameDesc.Height / ((double)videoInputFrameRect.bottom - (double)videoInputFrameRect.top));
@@ -1013,8 +1015,10 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 			}
 
 			if (gotMousePointer) {
+				//Clicks need to be drawn before rendering scaled image, while it seems pointer needs to be processed later.
 				DrawMouseClick(pFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, durationSinceLastFrame100Nanos);
 			}
+			//For scaled video, we directly crop a frame here. For non-scaled video, SetSourceRectangle does the job so we skip cropping. 
 			if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT || m_IsScalingEnabled) && !isDestRectEqualToSourceRect) {
 				ID3D11Texture2D *pCroppedFrameCopy;
 				RETURN_ON_BAD_HR(hr = CropFrame(pFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
@@ -1026,6 +1030,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
 				RETURN_ON_BAD_HR(hr);
 				if (gotMousePointer) {
+					//Pass desktop texture as well to draw pointer's surroundings
 					hr = DrawMousePointer(pResizedFrameCopy, pMousePointer.get(), PtrInfo, screenRotation, pFrameCopy);
 					if (FAILED(hr)) {
 						_com_error err(hr);
@@ -1457,7 +1462,6 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 		RETURN_ON_BAD_HR(MFCreateFile(MF_ACCESSMODE_READWRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, pathString, &pOutStream));
 	};
 
-
 	UINT sourceWidth = max(0, sourceRect.right - sourceRect.left);
 	UINT sourceHeight = max(0, sourceRect.bottom - sourceRect.top);
 
@@ -1467,7 +1471,7 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 	if (m_IsScalingEnabled) {
 		sourceWidth = m_ScaledFrameWidth;
 		sourceHeight = m_ScaledFrameHeight;
-		//We'll leverage CopySubresourceRegion instead of SetSourceRectangle to crop when the scaling option is enabled.
+		//We'll leverage CopySubresourceRegion instead of SetSourceRectangle to crop when the scaling option is enabled. This may not be the best approach.
 		destWidth = m_ScaledFrameWidth;
 		destHeight = m_ScaledFrameHeight;
 	}
@@ -1978,6 +1982,7 @@ HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT d
 
 	int destWidth = destRect.right - destRect.left;
 	int destHeight = destRect.bottom - destRect.top;
+	//We already crop the image when scaling is enabled.
 	if (m_IsScalingEnabled || frameDesc.Width == destWidth && frameDesc.Height == destHeight) {
 		m_Device->CreateTexture2D(&frameDesc, nullptr, &m_pFrameCopyForSnapshotsWithVideo);
 		// Copy the current frame for a separate thread to write it to a file asynchronously.

@@ -268,7 +268,7 @@ namespace TestApp
             double scaledFrameRatio;
             Double.TryParse(this.ScaledFrameRatioTextBox.Text, out scaledFrameRatio);
             if (scaledFrameRatio == 0)
-                scaledFrameRatio = 1;
+                scaledFrameRatio = 1.0;
 
             Display selectedDisplay = (Display)this.ScreenComboBox.SelectedItem;
 
