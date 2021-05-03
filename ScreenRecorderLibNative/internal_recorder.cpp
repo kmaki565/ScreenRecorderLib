@@ -699,7 +699,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D* pResizedFrameCopy;
-			//Adjusting view port is necessary as the input size is varied along with content size.
+			//Adjust view port as input size varies along with content size.
 			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight,
 				(double)sourceFrameDesc.Width / ((double)videoInputFrameRect.right - (double)videoInputFrameRect.left),
 				(double)sourceFrameDesc.Height / ((double)videoInputFrameRect.bottom - (double)videoInputFrameRect.top));
