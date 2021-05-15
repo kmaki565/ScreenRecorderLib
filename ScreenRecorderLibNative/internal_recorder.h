@@ -219,6 +219,8 @@ private:
 	UINT32 m_ScaledFrameWidth = 0;
 	UINT32 m_ScaledFrameHeight = 0;
 	double m_ScaledFrameRatio = 1.0;
+	double m_ScaledFrameRatio_Width = 1.0;	//Set and used internally
+	double m_ScaledFrameRatio_Height = 1.0;	//Set and used internally
 	bool m_IsScalingEnabled = false;
 	bool m_IsMousePointerEnabled = true;
 	bool m_IsAudioEnabled = false;
@@ -285,7 +287,7 @@ private:
 	HRESULT SetAttributeU32(_Inout_ ATL::CComPtr<ICodecAPI>& codec, const GUID& guid, UINT32 value);
 	HRESULT CreateInputMediaTypeFromOutput(_In_ IMFMediaType *pType, const GUID& subtype, _Outptr_ IMFMediaType **ppType);
 	HRESULT DrawMouseClick(ID3D11Texture2D* frame, mouse_pointer* pointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation, INT64 durationSinceLastFrame100Nanos);
-	HRESULT DrawMousePointer(ID3D11Texture2D *frame, mouse_pointer *pointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation, ID3D11Texture2D* desktopTexture = nullptr);
+	HRESULT DrawMousePointer(ID3D11Texture2D *frame, mouse_pointer *pointer, mouse_pointer::PTR_INFO ptrInfo, DXGI_MODE_ROTATION screenRotation);
 	HRESULT CropFrame(ID3D11Texture2D *frame, D3D11_TEXTURE2D_DESC frameDesc, RECT destRect, _Outptr_ ID3D11Texture2D **pCroppedFrame);
 	HRESULT CreateCaptureItem(_Out_ winrt::Windows::Graphics::Capture::GraphicsCaptureItem *captureItem);
 	HRESULT GetVideoProcessor(IMFSinkWriter *pSinkWriter, DWORD streamIndex, IMFVideoProcessorControl **pVideoProcessor);
