@@ -250,7 +250,6 @@ private:
 	void SetDebugName(ID3D11DeviceChild* child, const std::string& name);
 	void SetViewPort(ID3D11DeviceContext *deviceContext, UINT Width, UINT Height);
 	RECT MakeRectEven(RECT rect);
-	RECT ScaleRect(RECT orgRect, double ratio_width, double ratio_height);
 	std::wstring GetImageExtension();
 	std::wstring GetVideoExtension();
 	bool IsSnapshotsWithVideoEnabled() { return (m_RecorderMode == MODE_VIDEO) && m_TakesSnapshotsWithVideo; }
