@@ -807,6 +807,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 		if (pStream != nullptr) {
 			RETURN_ON_BAD_HR(hr = MFCreateMFByteStreamOnStream(pStream, &outputStream));
 		}
+		//For scaled video, specify the same rect for source and dest and don't apply VideoProcessor functions in the routine.
 		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device,
 			m_IsScalingEnabled ? rectForScaling : videoInputFrameRect,
 			m_IsScalingEnabled ? rectForScaling : videoOutputFrameRect,
@@ -1034,7 +1035,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 					//We just log the error and continue if the mouse pointer failed to draw. If there is an error with DXGI, it will be handled on the next call to AcquireNextFrame.
 				}
 			}
-			//For scaled video, we directly crop a frame here. For non-scaled video, SetSourceRectangle does the job so we skip cropping. 
+			//For scaled video, we directly crop a frame here. For non-scaled video, VideoProcessor's SetSourceRectangle is leveraged instead. 
 			if ((m_RecorderMode == MODE_SLIDESHOW || m_RecorderMode == MODE_SNAPSHOT || m_IsScalingEnabled) && !isDestRectEqualToSourceRect) {
 				ID3D11Texture2D *pCroppedFrameCopy;
 				RETURN_ON_BAD_HR(hr = CropFrame(pFrameCopy, destFrameDesc, videoOutputFrameRect, &pCroppedFrameCopy));
@@ -1948,7 +1949,7 @@ HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT d
 		return S_FALSE;
 
 	HRESULT hr = S_OK;
-	CComPtr<ID3D11Texture2D> m_pFrameCopyForSnapshotsWithVideo = nullptr;
+	CComPtr<ID3D11Texture2D> pFrameCopyForSnapshotsWithVideo = nullptr;
 
 	D3D11_TEXTURE2D_DESC frameDesc;
 	frame->GetDesc(&frameDesc);
@@ -1960,17 +1961,17 @@ HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT d
 		//If the source frame is larger than the destionation rect, we crop it, to avoid black borders around the snapshots.
 		frameDesc.Width = min(destWidth, frameDesc.Width);
 		frameDesc.Height = min(destHeight, frameDesc.Height);
-		RETURN_ON_BAD_HR(hr = CropFrame(frame, frameDesc, destRect, &m_pFrameCopyForSnapshotsWithVideo));
+		RETURN_ON_BAD_HR(hr = CropFrame(frame, frameDesc, destRect, &pFrameCopyForSnapshotsWithVideo));
 	}
 	else {
-		m_Device->CreateTexture2D(&frameDesc, nullptr, &m_pFrameCopyForSnapshotsWithVideo);
+		m_Device->CreateTexture2D(&frameDesc, nullptr, &pFrameCopyForSnapshotsWithVideo);
 		// Copy the current frame for a separate thread to write it to a file asynchronously.
-		m_ImmediateContext->CopyResource(m_pFrameCopyForSnapshotsWithVideo, frame);
+		m_ImmediateContext->CopyResource(pFrameCopyForSnapshotsWithVideo, frame);
 	}
 
 	m_previousSnapshotTaken = steady_clock::now();
 	wstring snapshotPath = m_OutputSnapshotsFolderPath + L"\\" + s2ws(CurrentTimeToFormattedString()) + GetImageExtension();
-	WriteFrameToImageAsync(m_pFrameCopyForSnapshotsWithVideo, snapshotPath.c_str());
+	WriteFrameToImageAsync(pFrameCopyForSnapshotsWithVideo, snapshotPath.c_str());
 	return hr;
 }
 
