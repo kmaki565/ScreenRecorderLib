@@ -522,7 +522,9 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 	videoOutputFrameRect.bottom = sourceHeight;
 	videoOutputFrameRect = MakeRectEven(videoOutputFrameRect);
 	videoInputFrameRect = videoOutputFrameRect;
+
 	DetermineScalingParameters(Width(videoInputFrameRect), Height(videoInputFrameRect));
+	RECT rectForScaling{ 0, 0, m_ScaledFrameWidth, m_ScaledFrameHeight };
 
 	//Differing input and output dimensions of the mediatype initializes the video processor with the sink writer so we can use it for resizing the input.
 	//These values will be overwritten on a frame by frame basis.
@@ -552,14 +554,10 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		}
 		pCallBack = new (std::nothrow)CMFSinkWriterCallback(m_FinalizeEvent, hMarkEvent);
 
-		RECT sourceRect = videoInputFrameRect;
-		RECT destRect = videoOutputFrameRect;
-		if (m_IsScalingEnabled) {
-			RECT rect{ 0, 0, m_ScaledFrameWidth, m_ScaledFrameHeight };
-			sourceRect = rect;
-			destRect = rect;
-		}
-		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device, sourceRect, destRect, DXGI_MODE_ROTATION_UNSPECIFIED, pCallBack, &m_SinkWriter, &m_VideoStreamIndex, &m_AudioStreamIndex));
+		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device, 
+			m_IsScalingEnabled ? rectForScaling : videoInputFrameRect, 
+			m_IsScalingEnabled ? rectForScaling : videoOutputFrameRect,
+			DXGI_MODE_ROTATION_UNSPECIFIED, pCallBack, &m_SinkWriter, &m_VideoStreamIndex, &m_AudioStreamIndex));
 	}
 
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
@@ -735,12 +733,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		SetDebugName(pFrameCopy, "FrameCopy");
 
 		if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-			RECT rectToDraw = videoInputFrameRect;
-			if (m_IsScalingEnabled) {
-				RECT rect{ 0, 0, m_ScaledFrameWidth, m_ScaledFrameHeight };
-				rectToDraw = rect;
-			}
-			TakeSnapshotsWithVideo(pFrameCopy, rectToDraw);
+			TakeSnapshotsWithVideo(pFrameCopy, m_IsScalingEnabled ? rectForScaling : videoInputFrameRect);
 		}
 
 		if (token.is_canceled()) {
