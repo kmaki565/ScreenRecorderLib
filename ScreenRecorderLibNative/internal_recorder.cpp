@@ -522,7 +522,7 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 	videoOutputFrameRect.bottom = sourceHeight;
 	videoOutputFrameRect = MakeRectEven(videoOutputFrameRect);
 	videoInputFrameRect = videoOutputFrameRect;
-	DetermineScalingParameters(videoInputFrameRect.right - videoInputFrameRect.left, videoInputFrameRect.bottom - videoInputFrameRect.top);
+	DetermineScalingParameters(Width(videoInputFrameRect), Height(videoInputFrameRect));
 
 	//Differing input and output dimensions of the mediatype initializes the video processor with the sink writer so we can use it for resizing the input.
 	//These values will be overwritten on a frame by frame basis.
@@ -551,7 +551,15 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 			RETURN_ON_BAD_HR(hr = MFCreateMFByteStreamOnStream(pStream, &outputStream));
 		}
 		pCallBack = new (std::nothrow)CMFSinkWriterCallback(m_FinalizeEvent, hMarkEvent);
-		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device, videoInputFrameRect, videoOutputFrameRect, DXGI_MODE_ROTATION_UNSPECIFIED, pCallBack, &m_SinkWriter, &m_VideoStreamIndex, &m_AudioStreamIndex));
+
+		RECT sourceRect = videoInputFrameRect;
+		RECT destRect = videoOutputFrameRect;
+		if (m_IsScalingEnabled) {
+			RECT rect{ 0, 0, m_ScaledFrameWidth, m_ScaledFrameHeight };
+			sourceRect = rect;
+			destRect = rect;
+		}
+		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device, sourceRect, destRect, DXGI_MODE_ROTATION_UNSPECIFIED, pCallBack, &m_SinkWriter, &m_VideoStreamIndex, &m_AudioStreamIndex));
 	}
 
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
@@ -622,9 +630,9 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 					videoProcessor->SetSourceRectangle(&videoInputFrameRect);
 					//The destination rectangle is the portion of the output surface where the source rectangle is blitted.
 					videoProcessor->SetDestinationRectangle(&videoOutputFrameRect);
-					TRACE("Changing video processor surface rect: source=%dx%d, dest = %dx%d", videoInputFrameRect.right - videoInputFrameRect.left, videoInputFrameRect.bottom - videoInputFrameRect.top, videoOutputFrameRect.right - videoOutputFrameRect.left, videoOutputFrameRect.bottom - videoOutputFrameRect.top);
+					TRACE("Changing video processor surface rect: source=%dx%d, dest = %dx%d", Width(videoInputFrameRect), Height(videoInputFrameRect), Width(videoOutputFrameRect), Height(videoOutputFrameRect));
 				}
-				SetViewPort(m_ImmediateContext, videoInputFrameRect.right - videoInputFrameRect.left, videoInputFrameRect.bottom - videoInputFrameRect.top);
+				SetViewPort(m_ImmediateContext, Width(videoInputFrameRect), Height(videoInputFrameRect));
 				previousInputFrameRect = videoInputFrameRect;
 			}
 			// Get mouse info. Windows Graphics Capture includes the mouse cursor on the texture, so we only get the positioning info for mouse click draws.
@@ -716,13 +724,9 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D* pResizedFrameCopy;
 			//Adjust view port as input size varies along with content size.
-	
-			RECT sourceRect;
-
-			UINT sourceWidth = max(0, sourceRect.right - sourceRect.left);
-			UINT sourceHeight = max(0, sourceRect.bottom - sourceRect.top);
-
-			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, sourceWidth, sourceHeight);
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight,
+				(double)sourceFrameDesc.Width / (double)Width(videoInputFrameRect),
+				(double)sourceFrameDesc.Height / (double)Height(videoInputFrameRect));
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
 			pFrameCopy.Attach(pResizedFrameCopy);
@@ -731,7 +735,12 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		SetDebugName(pFrameCopy, "FrameCopy");
 
 		if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-			TakeSnapshotsWithVideo(pFrameCopy, videoInputFrameRect);
+			RECT rectToDraw = videoInputFrameRect;
+			if (m_IsScalingEnabled) {
+				RECT rect{ 0, 0, m_ScaledFrameWidth, m_ScaledFrameHeight };
+				rectToDraw = rect;
+			}
+			TakeSnapshotsWithVideo(pFrameCopy, rectToDraw);
 		}
 
 		if (token.is_canceled()) {
