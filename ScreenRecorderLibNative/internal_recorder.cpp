@@ -176,19 +176,30 @@ void internal_recorder::DetermineScalingParameters(int originalWidth, int origin
 	if (m_ScaledFrameWidth != 0 && m_ScaledFrameHeight != 0) {
 		m_ScaledFrameWidth = MakeEven(m_ScaledFrameWidth);
 		m_ScaledFrameHeight = MakeEven(m_ScaledFrameHeight);
-		m_ScaledFrameRatio_Width = (double)m_ScaledFrameWidth / (double)originalWidth;
-		m_ScaledFrameRatio_Height = (double)m_ScaledFrameHeight / (double)originalHeight;
 		m_IsScalingEnabled = true;
 	}
 	else if (m_ScaledFrameRatio != 1.0) {
-		m_ScaledFrameRatio_Width = m_ScaledFrameRatio;
-		m_ScaledFrameRatio_Height = m_ScaledFrameRatio;
 		m_ScaledFrameWidth = MakeEven(static_cast<UINT32>(originalWidth * m_ScaledFrameRatio));
 		m_ScaledFrameHeight = MakeEven(static_cast<UINT32>(originalHeight * m_ScaledFrameRatio));
 		m_IsScalingEnabled = true;
 	}
 	else 
 		m_IsScalingEnabled = false;
+}
+
+/// <summary>
+/// Scales (resizes) rectangle by given scaling ratio.
+/// </summary>
+/// <param name="orgRect"></param>
+/// <returns></returns>
+RECT internal_recorder::ScaleRect(RECT orgRect, double ratio_width, double ratio_height)
+{
+	RECT newRect = {};
+	newRect.left = (LONG)(orgRect.left * ratio_width);
+	newRect.top = (LONG)(orgRect.top * ratio_height);
+	newRect.right = (LONG)(orgRect.right * ratio_width);
+	newRect.bottom = (LONG)(orgRect.bottom * ratio_height);
+	return newRect;
 }
 
 HRESULT internal_recorder::ConfigureOutputDir(std::wstring path) {
@@ -705,9 +716,13 @@ HRESULT internal_recorder::StartGraphicsCaptureRecorderLoop(IStream *pStream)
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D* pResizedFrameCopy;
 			//Adjust view port as input size varies along with content size.
-			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight,
-				(double)sourceFrameDesc.Width / ((double)videoInputFrameRect.right - (double)videoInputFrameRect.left),
-				(double)sourceFrameDesc.Height / ((double)videoInputFrameRect.bottom - (double)videoInputFrameRect.top));
+	
+			RECT sourceRect;
+
+			UINT sourceWidth = max(0, sourceRect.right - sourceRect.left);
+			UINT sourceHeight = max(0, sourceRect.bottom - sourceRect.top);
+
+			hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, sourceWidth, sourceHeight);
 			RETURN_ON_BAD_HR(hr);
 			pFrameCopy.Release();
 			pFrameCopy.Attach(pResizedFrameCopy);
@@ -777,14 +792,25 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 	RETURN_ON_BAD_HR(hr = InitializeDesc(outputDuplDesc, &sourceFrameDesc, &destFrameDesc, &videoInputFrameRect, &videoOutputFrameRect));
 	bool isDestRectEqualToSourceRect = EqualRect(&videoInputFrameRect, &videoOutputFrameRect);
 
-	DetermineScalingParameters(videoInputFrameRect.right - videoInputFrameRect.left, videoInputFrameRect.bottom - videoInputFrameRect.top);
+	DetermineScalingParameters(Width(videoInputFrameRect), Height(videoInputFrameRect));
+
+	// Rectangles that consider scaling output
+	RECT sourceRect = videoInputFrameRect;
+	RECT destRect = videoOutputFrameRect;
+	if (m_IsScalingEnabled) {
+		double ratio_width = (double)m_ScaledFrameWidth / Width(videoInputFrameRect);
+		double ratio_height = (double)m_ScaledFrameHeight / Height(videoInputFrameRect);
+		sourceRect = ScaleRect(videoInputFrameRect, ratio_width, ratio_height);
+		destRect = ScaleRect(videoOutputFrameRect, ratio_width, ratio_height);
+	}
+
 	std::unique_ptr<Resizer> pResizer = make_unique<Resizer>();
 	if (m_IsScalingEnabled)
 		RETURN_ON_BAD_HR(hr = pResizer->Initialize(m_ImmediateContext, m_Device));
 
 	std::unique_ptr<mouse_pointer> pMousePointer = make_unique<mouse_pointer>();
 	RETURN_ON_BAD_HR(hr = pMousePointer->Initialize(m_ImmediateContext, m_Device));
-	SetViewPort(m_ImmediateContext, videoInputFrameRect.right - videoInputFrameRect.left, videoInputFrameRect.bottom - videoInputFrameRect.top);
+	SetViewPort(m_ImmediateContext, Width(videoInputFrameRect), Height(videoInputFrameRect));
 
 	mouse_pointer::PTR_INFO PtrInfo;
 	RtlZeroMemory(&PtrInfo, sizeof(PtrInfo));
@@ -804,7 +830,7 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 		if (pStream != nullptr) {
 			RETURN_ON_BAD_HR(hr = MFCreateMFByteStreamOnStream(pStream, &outputStream));
 		}
-		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device, videoInputFrameRect, videoOutputFrameRect, outputDuplDesc.Rotation, nullptr, &m_SinkWriter, &m_VideoStreamIndex, &m_AudioStreamIndex));
+		RETURN_ON_BAD_HR(hr = InitializeVideoSinkWriter(m_OutputFullPath, outputStream, m_Device, sourceRect, destRect, outputDuplDesc.Rotation, nullptr, &m_SinkWriter, &m_VideoStreamIndex, &m_AudioStreamIndex));
 	}
 	if (pLoopbackCaptureInputDevice)
 		pLoopbackCaptureInputDevice->ClearRecordedBytes();
@@ -1038,14 +1064,14 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 
 			if (m_IsScalingEnabled) {
 				ID3D11Texture2D *pResizedFrameCopy;
-				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
+				hr = pResizer->Resize(pFrameCopy, &pResizedFrameCopy, Width(sourceRect), Height(sourceRect));
 				RETURN_ON_BAD_HR(hr);
 				pFrameCopy.Release();
 				pFrameCopy.Attach(pResizedFrameCopy);
 			}
 
 			if (IsSnapshotsWithVideoEnabled() && IsTimeToTakeSnapshot()) {
-				TakeSnapshotsWithVideo(pFrameCopy, videoOutputFrameRect);
+				TakeSnapshotsWithVideo(pFrameCopy, destRect);
 			}
 
 			FrameWriteModel model;
@@ -1084,11 +1110,8 @@ HRESULT internal_recorder::StartDesktopDuplicationRecorderLoop(IStream *pStream,
 		}
 		if (m_IsScalingEnabled) {
 			ID3D11Texture2D *pResizedFrameCopy;
-			hr = pResizer->Resize(pPreviousFrameCopy, &pResizedFrameCopy, m_ScaledFrameWidth, m_ScaledFrameHeight);
+			hr = pResizer->Resize(pPreviousFrameCopy, &pResizedFrameCopy, Width(sourceRect), Height(sourceRect));
 			RETURN_ON_BAD_HR(hr);
-			if (gotMousePointer) {
-
-			}
 			pPreviousFrameCopy.Release();
 			pPreviousFrameCopy.Attach(pResizedFrameCopy);
 		}
@@ -1448,11 +1471,6 @@ HRESULT internal_recorder::InitializeVideoSinkWriter(std::wstring path, _In_opt_
 	{
 		RETURN_ON_BAD_HR(MFCreateFile(MF_ACCESSMODE_READWRITE, MF_OPENMODE_FAIL_IF_EXIST, MF_FILEFLAGS_NONE, pathString, &pOutStream));
 	};
-
-	if (m_IsScalingEnabled) {
-		sourceRect = ScaleRect(sourceRect, m_ScaledFrameRatio_Width, m_ScaledFrameRatio_Height);
-		destRect = ScaleRect(destRect, m_ScaledFrameRatio_Width, m_ScaledFrameRatio_Height);
-	}
 
 	UINT sourceWidth = max(0, sourceRect.right - sourceRect.left);
 	UINT sourceHeight = max(0, sourceRect.bottom - sourceRect.top);
@@ -1954,9 +1972,6 @@ HRESULT internal_recorder::TakeSnapshotsWithVideo(ID3D11Texture2D* frame, RECT d
 
 	D3D11_TEXTURE2D_DESC frameDesc;
 	frame->GetDesc(&frameDesc);
-
-	if (m_IsScalingEnabled) 
-		destRect = ScaleRect(destRect, m_ScaledFrameRatio_Width, m_ScaledFrameRatio_Height);
 
 	int destWidth = destRect.right - destRect.left;
 	int destHeight = destRect.bottom - destRect.top;

@@ -219,8 +219,6 @@ private:
 	UINT32 m_ScaledFrameWidth = 0;
 	UINT32 m_ScaledFrameHeight = 0;
 	double m_ScaledFrameRatio = 1.0;
-	double m_ScaledFrameRatio_Width = 1.0;	//Set and used internally
-	double m_ScaledFrameRatio_Height = 1.0;	//Set and used internally
 	bool m_IsScalingEnabled = false;
 	bool m_IsMousePointerEnabled = true;
 	bool m_IsAudioEnabled = false;
@@ -252,6 +250,7 @@ private:
 	void SetDebugName(ID3D11DeviceChild* child, const std::string& name);
 	void SetViewPort(ID3D11DeviceContext *deviceContext, UINT Width, UINT Height);
 	RECT MakeRectEven(RECT rect);
+	RECT ScaleRect(RECT orgRect, double ratio_width, double ratio_height);
 	std::wstring GetImageExtension();
 	std::wstring GetVideoExtension();
 	bool IsSnapshotsWithVideoEnabled() { return (m_RecorderMode == MODE_VIDEO) && m_TakesSnapshotsWithVideo; }

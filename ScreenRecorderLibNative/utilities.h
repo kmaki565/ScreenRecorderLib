@@ -96,11 +96,10 @@ inline UINT32 MakeEven(UINT32 number) {
 	return number;
 }
 
-inline RECT ScaleRect(RECT orgRect, double ratioForWidth, double ratioForHeight) {
-	RECT newRect = {};
-	newRect.left = (LONG)(orgRect.left * ratioForWidth);
-	newRect.top = (LONG)(orgRect.top * ratioForHeight);
-	newRect.right = (LONG)(orgRect.right * ratioForWidth);
-	newRect.bottom = (LONG)(orgRect.bottom * ratioForHeight);
-	return newRect;
+inline LONG Width(RECT rect) {
+	return rect.right - rect.left;
+}
+
+inline LONG Height(RECT rect) {
+	return rect.bottom - rect.top;
 }
